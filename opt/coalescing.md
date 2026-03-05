@@ -188,18 +188,13 @@ into two registers, and _then_ rearrange the data inside the registers,
 as follows:
 
 ```C
-/// First half comes from the odd indices, second half from the even ones.
-size_t separate_re_im(size_t i, size_t n) {
-    return (i < n / 2) ? 2 * i : 2 * (i - n / 2) + 1;
-}
 
 float norm(float vec[32][2]) {
   ripple_block_t BS = ripple_set_block_shape(VECTOR, 32, 2);
   size_t v0 = ripple_id(BS, 0);
   size_t v1 = ripple_id(BS, 1);
-  float all_data = vec[v0][v1];
-  float real_and_im = ripple_shuffle(all_data, separate_re_im);
-  return ripple_reduceadd(0b01, ripple_reducemul(0b10, real_and_im));
+  float all_data = vec[2 * v0 + v1];;
+  return ripple_reduceadd(0b01, ripple_reducemul(0b10, all_data));
 }
 ```
 
