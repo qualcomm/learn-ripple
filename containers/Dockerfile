@@ -62,7 +62,7 @@ RUN wget -q "https://softwarecenter.qualcomm.com/api/download/software/sdks/Hexa
 # ---------------------------------------------------------------------------
 # LLVM source
 # ---------------------------------------------------------------------------
-RUN git clone --depth 1 https://github.com/Ripple-Programming/llvm-project.git /build/llvm-project
+RUN git clone --depth 1 https://github.com/qualcomm/Ripple.git /build/llvm-project
 RUN git clone --depth 1 https://github.com/qualcomm/eld.git /build/eld
 
 FROM sources AS build-llvm
@@ -224,7 +224,7 @@ FROM toolchain AS test-suite
 # ---------------------------------------------------------------------------
 # Clone the test suite and build it for Hexagon (standalone / sim)
 # ---------------------------------------------------------------------------
-RUN git clone --depth 1 https://github.com/Ripple-Programming/ripple-test-suite.git /home/ripple/ripple-test-suite \
+RUN git clone --depth 1 https://github.com/qualcomm/ripple-test-suite.git /home/ripple/ripple-test-suite \
     && rm -rf /home/ripple/ripple-test-suite/.git
 
 SHELL ["/usr/bin/bash", "-c"]
@@ -245,7 +245,7 @@ RUN . /opt/hexagon-sdk/setup_sdk_env.source && \
     && cmake --build /home/ripple/ripple-test-suite/build
 
 # Clone and build documentation (three books)
-RUN git clone --depth 1 https://github.com/Ripple-Programming/learn-ripple.git /home/ripple/learn-ripple \
+RUN git clone --depth 1 https://github.com/qualcomm/learn-ripple.git /home/ripple/learn-ripple \
     && rm -rf /home/ripple/learn-ripple/.git
 RUN mdbook build -d build /home/ripple/learn-ripple \
     && mdbook build -d build /home/ripple/learn-ripple/opt/hexagon \
