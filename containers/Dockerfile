@@ -62,7 +62,7 @@ RUN wget -q "https://softwarecenter.qualcomm.com/api/download/software/sdks/Hexa
 # ---------------------------------------------------------------------------
 # LLVM source
 # ---------------------------------------------------------------------------
-RUN git clone --depth 1 https://github.com/qualcomm/Ripple.git /build/llvm-project
+RUN git clone --depth 1 https://github.com/qualcomm/ripple.git /build/llvm-project
 RUN git clone --depth 1 https://github.com/qualcomm/eld.git /build/eld
 
 FROM sources AS build-llvm
