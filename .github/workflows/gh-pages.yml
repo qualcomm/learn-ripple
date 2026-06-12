@@ -6,67 +6,56 @@ on:
       - main  # Set a branch name to trigger deployment
   pull_request:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
     steps:
       - uses: actions/checkout@v3
 
-      - name: Build
+      - name: Install Rust and mdbook
         run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y  # Install Rust
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
           cargo install mdbook
-          mdbook build -d build
-          echo "Built the Ripple User Manual."
 
-      - name: Deploy
-        env:
-          HOME: ${{ runner.temp }}
-        uses: peaceiris/actions-gh-pages@v4
-        # If you're changing the branch from main,
-        # also change the `main` in `refs/heads/main`
-        # below accordingly.
-        if: github.ref == 'refs/heads/main'
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build
+      - name: Build main
+        run: mdbook build -d build
 
-      - name: BuildHexagon
+      - name: Build Hexagon
+        run: cd opt/hexagon && mdbook build -d build
+
+      - name: Build TroubleShooting
+        run: cd troubleshooting && mdbook build -d build
+
+      - name: Assemble site
         run: |
-          cd opt/hexagon && mdbook build -d build
-          echo "Built the Hexagon optimizaton guide."
+          mkdir -p site/opt/hexagon site/troubleshooting
+          cp -r build/. site/
+          cp -r opt/hexagon/build/. site/opt/hexagon/
+          cp -r troubleshooting/build/. site/troubleshooting/
 
-      - name: DeployHexagon
-        env:
-          HOME: ${{ runner.temp }}
-        uses: peaceiris/actions-gh-pages@v4
-        # If you're changing the branch from main,
-        # also change the `main` in `refs/heads/main`
-        # below accordingly.
+      - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./opt/hexagon/build
-          destination_dir: 'opt/hexagon'
+          path: ./site
 
-      - name: BuildTroubleShooting
-        run: |
-          cd troubleshooting && mdbook build -d build
-          echo "Built the Ripple troubleshooting guide."
-
-      - name: DeployTroubleShooting
-        env:
-          HOME: ${{ runner.temp }}
-        uses: peaceiris/actions-gh-pages@v4
-        # If you're changing the branch from main,
-        # also change the `main` in `refs/heads/main`
-        # below accordingly.
-        if: github.ref == 'refs/heads/main'
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./troubleshooting/build
-          destination_dir: 'troubleshooting'
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
