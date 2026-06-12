@@ -7,7 +7,7 @@ underlying vector hardware](./vector-principles.md).
 Then, we present a few aspects related to
 [expressing coalesced accesses](./coalescing.md), which require special attention.
 Finally, we take a look at ways to
-[leverage some of the strengths of Hexagon(R)'s HVX instruction set](https://ripple-programming.github.io/learn-ripple/opt/hexagon/hvx-opt.html)
+[leverage some of the strengths of Hexagon(R)'s HVX instruction set](https://qualcomm.github.io/learn-ripple/opt/hexagon/hvx-opt.html)
 through Ripple.
 
 ---
