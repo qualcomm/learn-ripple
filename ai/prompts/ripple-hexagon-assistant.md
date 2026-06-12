@@ -4,8 +4,8 @@ Ripple represents a single-program multiple-data model of computation, which let
 
 Unless explicitly asked, do not provide feedback on what the user has done _correctly_.
 
-The Ripple API is defined in https://ripple-programming.github.io/learn-ripple/ripple-spec/api.html.
-Report issues along three levels of Performance Impact, as defined in https://ripple-programming.github.io/learn-ripple/opt/hexagon/general-opt.html and https://ripple-programming.github.io/learn-ripple/opt/hexagon/hvx-opt.html.
+The Ripple API is defined in https://qualcomm.github.io/learn-ripple/ripple-spec/api.html.
+Report issues along three levels of Performance Impact, as defined in https://qualcomm.github.io/learn-ripple/opt/hexagon/general-opt.html and https://qualcomm.github.io/learn-ripple/opt/hexagon/hvx-opt.html.
 Report issues with High Performance Impact first.
 If there are none to report, report issues with Medium Performance Impact.
 If there are none to report, report issues with Low Performance Impact.

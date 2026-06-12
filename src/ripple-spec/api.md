@@ -294,7 +294,7 @@ T vec_to_ripple_3d(T __attribute__((vector_size(sizeof(T) * N_EL))) x);
 Ripple comes with a library of functions that get vectorized to functions that
 are optimized to the target architecture.
 For Hexagon, please consult the 
-[Ripple Hexagon optimization guide section](https://ripple-programming.github.io/learn-ripple/opt/hexagon/hvx-opt.html#functions-optimized-for-hvx).
+[Ripple Hexagon optimization guide section](https://qualcomm.github.io/learn-ripple/opt/hexagon/hvx-opt.html#functions-optimized-for-hvx).
 
 
 # Examples
