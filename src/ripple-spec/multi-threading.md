@@ -492,7 +492,7 @@ dynamic scheduling is available in OpenMP.
 
 SPMD is also available in OpenMP, within the scope of _parallel regions._
 
-The ISPC compiler offers the SPMD programming model for multi-threading.
+The Intel(R) ISPC compiler offers the SPMD programming model for multi-threading.
 
 ## Load balancing
 When the per-iteration load can be calculated statically by a compiler,
@@ -511,3 +511,4 @@ __[1]__ C. Rosetti, Ph. Clauss, "Algebraic Tiling," IMPACT 2023,
 
 OpenMP is a registered trademark of the OpenMP Architecture Review Board.
 
+The Intel (R) ISPC Compiler is a trademark of Intel Corporation.
