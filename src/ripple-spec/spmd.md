@@ -249,7 +249,7 @@ Please refer to the [Ripple API Specification](./api.md) for more detail on
 these API functions.
 
 # Multi-dimensional SPMD in Ripple
-Part of Ripple's objective to be as efficient as possible forced
+Part of Ripple's objective to be as efficient as possible for
 an interpretation of multi-dimensional blocks
 that is different from the one known in CUDA(R) and OpenCL(R).
 In Ripple, values of different dimensions can coexist in the same function.
@@ -428,7 +428,7 @@ the `8x1` conditional is broadcast (i.e., replicated) along dimension 1,
 and applied element-wise to the line 7 computation.
 
 Line 8 is trickier, because the `8x1` condition shape cannot be broadcast
-to Line 7's `1x1` computation.
+to Line 8's `1x1` computation.
 The rule here is that the Line 8 statement should execute whenever there
 exists a value of `v0` for which `v0 % 2 == 0`.
 To obtain such a mask, Ripple takes the `OR` of all elements in the condition,
