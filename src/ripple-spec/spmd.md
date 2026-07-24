@@ -7,7 +7,7 @@ among a set of processing elements (PEs).
 Since CUDA(R) and OpenCL(R) are also SPMD parallel programming abstractions,
 CUDA and OpenCL developers will find Ripple familiar.
 However, there are some important differences with CUDA and OpenCL,
-which we stress in a the [Ripple vs. CUDA and OpenCL](./vs-cuda.md) section.
+which we stress in the [Ripple vs. CUDA and OpenCL](./vs-cuda.md) section.
 
 To create a parallel program using the SPMD model,
 a user has to specify which PE will execute which portion of the program.
@@ -249,7 +249,7 @@ Please refer to the [Ripple API Specification](./api.md) for more detail on
 these API functions.
 
 # Multi-dimensional SPMD in Ripple
-Part of Ripple's objective to be as efficient as possible forced
+Part of Ripple's objective to be as efficient as possible for
 an interpretation of multi-dimensional blocks
 that is different from the one known in CUDA(R) and OpenCL(R).
 In Ripple, values of different dimensions can coexist in the same function.
@@ -277,7 +277,7 @@ in which a 2-dimensional block is declared, with two indices `x` and `y`.
 14:   }
 15: }
 ```
-__Fig.smpd-1__: An outer-product matrix multiply kernel.
+__Fig.spmd-1__: An outer-product matrix multiply kernel.
 
 Let's assume that the targeted SIMD vector engine can do
 64 single-precision floating-point computations at a time,
@@ -428,7 +428,7 @@ the `8x1` conditional is broadcast (i.e., replicated) along dimension 1,
 and applied element-wise to the line 7 computation.
 
 Line 8 is trickier, because the `8x1` condition shape cannot be broadcast
-to Line 7's `1x1` computation.
+to Line 8's `1x1` computation.
 The rule here is that the Line 8 statement should execute whenever there
 exists a value of `v0` for which `v0 % 2 == 0`.
 To obtain such a mask, Ripple takes the `OR` of all elements in the condition,
@@ -441,7 +441,7 @@ and then broadcast along dimension 1, resulting in a `1x8` mask,
 which can be applied to the `1x8` Line 8 computation.
 
 # Implicit scalar expansion
-Consider our `Fig. smpd-1` outer-product example, but where we want to
+Consider our `Fig. spmd-1` outer-product example, but where we want to
 perform the tile matrix multiplication (i.e. line 11) using two
 statements:
 - one to compute the (two-dimensional) outer product

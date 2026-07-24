@@ -12,7 +12,7 @@ This repository hosts training materials for **Ripple**, an LLVM-based project.
 
 
 ## Getting started (Hexagon)
-- This [docker image](./containers) b0uilds a Ubuntu-based Hexagon development environment for you, including the Hexagon SDK, the Ripple-based toolchain, based on the current Ripple tip, and the ripple test suite. The toolchain includes the Ripple Hexagon cross-compiler (clang) and the simulator (hexagon-sim).
+- This [docker image](./containers) builds a Ubuntu-based Hexagon development environment for you, including the Hexagon SDK, the Ripple-based toolchain, based on the current Ripple tip, and the ripple test suite. The toolchain includes the Ripple Hexagon cross-compiler (clang) and the simulator (hexagon-sim).
 - [Ripple source code](https://github.com/qualcomm/ripple) (an LLVM fork).
 - [December source release](https://github.com/qualcomm/ripple/releases/tag/ripple_2025-12-19)
 

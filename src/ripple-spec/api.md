@@ -322,14 +322,14 @@ int32_t maximum =
 ```
 
 The `0b1` argument is a bit field, with bit `0` set to
-true (1).
+true (`1`).
 This means that we reduce the block along dimension 1.
-If this were a 32x16 two-dimensional block, for example, the same call to `reducemax` would
+If this were a 32x16 two-dimensional block, for example, the same call to `ripple_reducemax` would
 collapse the block along dimension `0` as well (using max),
 returning a 16-element, 1-dimensional block.
 
 ### Average / mean
-We demonstrate use of `reduceadd` through average computations.
+We demonstrate use of `ripple_reduceadd` through average computations.
 The following example, a naive version of average computation,
 uses a one-dimensional block.
 
@@ -347,7 +347,7 @@ float avg(size_t n, float * A) {
     return sum / n;
 }
 ```
-The first argument of reduceadd is a bitfield, describing the block dimensions
+The first argument of `riiple_reduceadd` is a bitfield, describing the block dimensions
 along which the reduction is being done.
 Here it says that we are reducing along dimension 0
 (the only dimension available).
