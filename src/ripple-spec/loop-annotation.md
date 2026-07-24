@@ -12,7 +12,7 @@ to a parallel processing element.
 The following Figure represents values of an "i" loop (in blue)
 being distributed onto blocks of size 8 (in orange),
 in a function that performs an element-wise addition.
-We illustrate the distribution for n = 19. `VECTOR_PE` is zero.
+We illustrate the distribution for n = 19. `VECTOR_LANE` is zero.
 
 ![Loop distribution using annotations](./loop-distribution.png)
 
@@ -93,10 +93,10 @@ Here's the syntax for it:
 #pragma ripple parallel Block(block_shape) Dims(<dim ...>) [NoRemainder]
 ```
 
-- `block_shape_variable`, a `ripple_block_t` value, i.e., the output of
+- `block_shape` variable, a `ripple_block_t` value, i.e., the output of
 `ripple_set_block_shape()` stored in a variable. You cannot pass the call to
 `ripple_set_block_shape()` directly to a `Block()` construct.
-The `NoRemainder` clause turns on the full-vector assumption,
+- The `NoRemainder` clause turns on the full-vector assumption,
 in which the epilogue isn't generated.
 
 # Block index access
