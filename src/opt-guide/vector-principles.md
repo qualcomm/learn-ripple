@@ -185,7 +185,7 @@ void function_with_aligned_ptrs(size_t size, float *in, float *out) {
 
 Ripple is based on clang, which natively supports a general alignment mechanism, through the `__builtin_assume_aligned()` function.
 This function lets us indicate that some pointers are aligned on a certain number of bytes.
-The compiler uses uses said indications to infer alignment of vector loads and stores occurring as a result of using Ripple.
+The compiler uses said indications to infer alignment of vector loads and stores occurring as a result of using Ripple.
 
 **In certain conditions, these hints cannot effectively be used by the compiler. We encourage to use the `ripple_ptr_aligned` API as close to the load/store instructions as possible for best results**.
 

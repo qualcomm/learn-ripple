@@ -163,15 +163,15 @@ through signature annotation is required.
 
 Shapes (row-major):
 
-- arg0 = `Tensor[8]` of f32 (vector)
-- arg1 = `Tensor[4][8]` of f32 (matrix with 4 rows × 8 cols)
+- `arg0` = `Tensor[8]` of f32 (vector)
+- `arg1` = `Tensor[4][8]` of f32 (matrix with 4 rows × 8 cols)
 - return = `Tensor[4]` of f32 (vector)
 
 Signature encoding:
 
-- arg0_t8f32
-- arg1_t4x8f32
-- ret_t4f32
+- `arg0_t8f32`
+- `arg1_t4x8f32`
+- `ret_t4f32`
 
 Because this is not **elementwise**, omit ew. Add pure because there is no
 side-effects in the matrix-vector operation.
@@ -240,7 +240,7 @@ Now the library source file can be turned into a bitcode representation using
 clang elem_ops.cc -c -emit-llvm -o elem_ops.bc
 ```
 Bitcode libraries have the `.bc` extension.
-Of course, if the elem_ops.cc functions are implemented using Ripple, you also need to pass the `-fenable-ripple` flag in the command above.
+Of course, if the `elem_ops.cc` functions are implemented using Ripple, you also need to pass the `-fenable-ripple` flag in the command above.
 
 ### Declaration to Ripple
 For Ripple to have access to the `elem_ops` bitcode library,
