@@ -47,7 +47,7 @@ and use it as in the example below:
 #define VECTOR_PE 0
 
 float foo(float * A, float * B, float * C, size_t n) {
-  ripple_block_t block = ripple_set_shape(VECTOR_PE, 8);
+  ripple_block_t block = ripple_set_block_shape(VECTOR_PE, 8);
   ripple_parallel(block, 0);
   for (size_t i = 0; i < n; ++i) {
     A[i] = elemprod(B[i], C[i]);
