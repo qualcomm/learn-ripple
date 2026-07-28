@@ -347,7 +347,7 @@ float avg(size_t n, float * A) {
     return sum / n;
 }
 ```
-The first argument of `riiple_reduceadd` is a bitfield, describing the block dimensions
+The first argument of `ripple_reduceadd` is a bitfield, describing the block dimensions
 along which the reduction is being done.
 Here it says that we are reducing along dimension 0
 (the only dimension available).
