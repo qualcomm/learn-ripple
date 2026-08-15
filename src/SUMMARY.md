@@ -8,7 +8,8 @@
 - [Distributing loop computations in Ripple](./ripple-spec/loop-annotation.md)
 - [Ripple API specification](./ripple-spec/api.md)
 - [Calling functions in Ripple code](./ripple-spec/calling.md)
-- [Ripple vector bitcode libraries](./ripple-spec/bc-lib.md)
+- [Ripple vector libraries](./ripple-spec/bc-lib.md)
+- [Multi-threading](./ripple-spec/multi-threading.md)
 - [Ripple vs. CUDA(R) and OpenCL(R)](./ripple-spec/vs-cuda.md)
 
 # Optimization Guide
