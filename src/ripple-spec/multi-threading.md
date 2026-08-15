@@ -7,7 +7,7 @@ programming models to express multi-threaded
 The Ripple thread API is prefixed with `ripple_thd`.
 Just like for SIMD, we can declare a block (of threads),
 retrieve the size of the block along any dimension,
-and get the index of your current thread along any dimension.
+and get the index of the current thread along any dimension.
 We can also annotate loops to distribute their iterations along one or more
 loops using the `ripple_thd_parallel` API,
 which supports static and dynamic scheduling.
@@ -21,7 +21,7 @@ Ripple thread block objects communicate with an underlying threading runtime,
 through a runtime object representing said underlying runtime.
 To declare a thread block in Ripple, we need to initialize the underlying
 runtime object,
-and then create a Ripple thread block object using the runtime object.
+and then create a Ripple thread block object using the underlying runtime object.
 
 The code below can be found in `ripple/thread.h`.
 
@@ -44,8 +44,9 @@ void ripple_thd_exit(void * underlying);
 ```
 
 The `flags` parameter defines the special multi-threading features we intend
-to use (barriers, dynamic load balancing).
-Not using them saves some init time and synchronization object space.
+to use (barriers, dynamic load balancing,
+which we will discuss later in this document).
+Not using them saves some initialization time and runtime object space.
 
 ```C
 // _____ Flags for Ripple runtime initialization _____
@@ -61,7 +62,7 @@ Not using them saves some init time and synchronization object space.
 #define RIPPLE_THD_NONE 0
 ```
 
-`max_dims` is currently 3 for all runtimes, and `n_blocks` can only be `1`
+`max_dims` is currently 3 for all runtimes, and `n_blocks` is limited to `1`
 in the QHPI underlying runtime.
 
 For each supported underlying threading runtime,
@@ -71,20 +72,21 @@ termination code.
 Supported runtimes and their underlying runtime are represented
 in the following table:
 
-| Runtime | Underlying Type | Include `ripple/thread.h` and link with |
-|---------|----------------|-----------|
-| QuRT    | `qthd_runtime_t` | `-lripple_thd_qurt` |
-| QHPI    | `QHPI_RuntimeHandle` | `-lripple_thd_qhpi` |
+| Runtime | Underlying Type | Include | Link with |
+|---------|----------------|----------|-----------|
+| QuRT    | `qthd_runtime_t` | `ripple/ripple_thd_qurt.h` |`-lripple_thd_qurt` |
+| QHPI    | `QHPI_RuntimeHandle`|`ripple/ripple_thd_qhpi.h` | `-lripple_thd_qhpi` |
 
 How underlying runtimes are initialized, and how the threads are spawned,
 are defined on a per-runtime basis.
-For instance, QHPI itself offers an environment in which the threads are
+For instance, QHPI offers an environment in which the threads are
 already running, and the underlying runtime object is already initialized.
 Conversely, the underlying runtime object in QuRT needs to be initialized before
 spawning the threads.
 
 We will see how to create an underlying runtime object and spawn threads
-for [QuRT](#qurt-specific-api) and [QHPI](#qhpi-specific-api) below.
+for [QuRT](#qurt-specific-api) and [QHPI](#qhpi-specific-api)
+later in this document.
 
 ### SPMD API
 ```C
@@ -92,7 +94,7 @@ for [QuRT](#qurt-specific-api) and [QHPI](#qhpi-specific-api) below.
 
 /// \brief Defines a thread block shape for the threads provided through
 /// the \p underlying_runtime threading runtime object.
-/// \p block_id when the underlying runtime supports multiple thread blocks,
+/// \param block_id when the underlying runtime supports multiple thread blocks,
 ///             this is the index of the block to use.
 /// \param n_dims the number of dimensions of the thread block shape
 /// \param shape the thread block shape.
@@ -114,9 +116,9 @@ size_t ripple_thd_get_block_size(ripple_thd_block_t b, unsigned dim);
 
 
 /// \brief an inter-thread barrier.
-/// \param dims This is a future parameter to select which
+/// \param dims (bitset) Selects which
 ///        dimensions are synchronizing through a barrier.
-///        Currently, this is an all-thread barrier (dim = -1).
+///        Use -1 for an all-thread barrier (dim = -1).
 void ripple_thd_barrier(ripple_thd_block_t b, unsigned dims);
 
 /// \brief Whether the indices of the current thread along dimensions \p dims
@@ -363,7 +365,7 @@ giving the same amount of iterations to all threads results in good
 load balancing.
 
 When the workload varies from one iteration to the next,
-we need to split the iterations less regularly,
+we need to distribute the iterations less regularly,
 in order to balance the work across threads.
 To enable such load balancing,
 Ripple supports a generic solution based on _dynamic scheduling_ of chunks.
@@ -429,7 +431,7 @@ as they tend to enable better use of caches, DMAs,
 and other hardware-accelerating features.
 - __Alignment__: Chunk sizes will determine the start address of data
 accessed by each chunk.
-Choosing a chunk size that correspond to hardware alignment constraints
+Choosing a chunk size that corresponds to hardware alignment constraints
 can enable aligned operations.
 - __Control overhead__: small chunks come with more control overhead,
 because they have to "jump" to the beginning of a loop more often.
@@ -518,14 +520,15 @@ void * vecadd(void * vargs) {
 
 ### Most common use case
 
-The most basic use case for a barrier is to synchronize subsequent parallel loops.
+The most basic use case for a barrier is
+to synchronize subsequent parallel sections of code.
+
 In the following example, the `i` loop produces some values in `tmp`,
 which are consumed by statements in a following `k` loop.
-
 Since we don't know which thread will access which elements of `tmp`
 (because we don't know `f()`), we need to wait for the `i` loop to be
 finished before we start the `k` loop.
-We make this wait happens using `ripple_thd_barrier()`.
+We make this wait happen using `ripple_thd_barrier()`.
 
 ```C
 runtime_t *rt; // assume it's defined elsewhere
@@ -537,7 +540,7 @@ void typical_barrier(size_t n, float * A, float * B) {
   for (size_t i = 0; i < n; ++i) {
     tmp[f(i)] = sqrtf(B[i]);
   }
-  // Make all threads along dimension 0 (the only dimension) join a barrier
+  // Make all threads along dimension 0 (the only dimension here) join a barrier
   ripple_thd_barrier(thdb, /*dimensions*/0b1);
 
   ripple_thd_parallel(thdb, 32, RIPPLE_THD_PAR_DFT, 0);
@@ -567,7 +570,7 @@ Hence we parallelize loop `j` along a one-dimensional thread block,
 using `ripple_thd_parallel`.
 But since consecutive values of `i` are not independent, we need to force
 all the threads distributed along `j` to wait each time the `j` loop has run.
-To enforce this, we would add a `ripple_thd_barrier()` call after loop `j`,
+To enforce this, we add a `ripple_thd_barrier()` call after loop `j`,
 as follows:
 
 ```C
@@ -590,36 +593,21 @@ The `ripple_thd` API offers multi-dimensional threading,
 i.e. multi-threading over a multi-dimensional block of threads.
 
 Multi-dimensional threading can be useful in many cases, including:
-1. when we want to exploit the parallelism of several nested loops;
-2. when we want to represent a heterogeneous multi-threading architecture
-3. when we only want subsets of the threads to synchronize with each other.
+1. When we want to exploit the parallelism of several nested loops;
+2. When we want to represent a heterogeneous multi-threading architecture.
+   We can often maintain some homogeneity by representing the heterogeneous set of threads within a dimension, leaving the other dimensions as homogeneous;
+3. When we only want subsets of the threads to synchronize with each other.
 
 To make things concrete, let us look at an example where a barrier
 synchronization is needed in a double-nested parallel loop nest.
 
-Let's assume that we want to reduce the values of A along its second dimension,
-and that you don't want to implement the reduction using atomics (at all).
+Let's assume that we want to sum the values of A along its second dimension,
+and that we don't want to implement the summation using atomics.
 
-Function `sum_along_dim1` below performs this by distributing
+Function `sum_along_dim1` below achieves this by distributing
 the iterations of `i` along dimension 0 of the Ripple thread block,
 and also distributing the iterations of `j` along dimension 1
 of that same thread block.
-
-For each value of `i`, each thread [*,t1] accumulates `chunk_size`
-values of A[i][*] sequentially into `scratch[i][t1]`.
-When loop `j` finishes, accumulations are all done along `j` into `nt1`
-partial sums (in `scratch[i]`).
-To finish the reduction along `j`, we need to sum the partial sums from
-`scratch[i]` into a scalar, which we store in `B[i]`.
-
-Since we don't want to use atomics for the summation in this example,
-we wait for all the partial sums to be computed, using ripple_thd_barrier.
-Notice that the "dimensions" parameter here is `along_t1`, i.e. 0b10.
-This means that a barrier along dimension 1 is executed,
-i.e. all threads with the same value for `t0` (and different values for `t1`)
-wait for each other.
-Finally, we let thread for which `t1 = 0` (the "main thread" along `j`) perform
-the summation.
 
 ```C++
 /// @brief 1-d reduction in a 2-d thread environment,
@@ -653,8 +641,24 @@ static void *sum_along_dim1(int (*A)[N], int *B, int *scratch[8],
 
   return nullptr;
 }
-
 ```
+
+For each value of `i`, each thread `[*,t1]` accumulates `chunk_size`
+values of `A[i][*]` sequentially into `scratch[i][t1]`.
+When loop `j` completes, accumulations are all done along `j` into `nt1`
+partial sums (in `scratch[i][*]`).
+To finish the reduction along `j`, we need to sum the partial sums from
+`scratch[i][*]` into a scalar, which we store in `B[i]`.
+
+Since we don't want to use atomics for the summation in this example,
+we wait for all the partial sums to be computed, using `ripple_thd_barrier()`.
+Notice that the "dimensions" parameter here is `along_t1`, i.e. `0b10`.
+This means that a barrier along dimension 1 is executed,
+i.e. all threads with the same value for `t0` (and different values for `t1`)
+wait for each other.
+Finally, we let thread for which `t1 = 0` (the "main thread" along `j`) perform
+the summation of partial sums.
+
 An interesting aspect of this example is that it mixes loop annotations
 (`ripple_thd_parallel()`) with direct use of SPMD indices (`t0`, `t1`).
 
@@ -677,7 +681,7 @@ Following sections provide additional detail.
 | Ripple API | What it is | initialization cost | when to initialize |
 |------------|------------|---------------------|--------------------|
 | `ripple_block_t` | compiler abstraction to convey SIMD properties| None| At least once per function (can sometimes be passed to inlined functions and some vector lib functions)|
-| `ripple_thd_block_t` | runtime object to convey threading properties | Synchronization cost | When you need to modify the thread block shape. Otherwise, pass it around functions.|
+| `ripple_thd_block_t` | runtime object to convey threading properties | Synchronization cost | When we need to modify the thread block shape. Otherwise, pass it around functions.|
 
 ### Single active thread block
 SIMD targets can require the use of several SIMD engines
@@ -690,7 +694,7 @@ for two main reasons:
 - The cost of spawning threads is typically non-trivial.
 Hence most efficient multi-threaded runtimes start threads
 and express multi-threading programs within an environment
-where threads are already running.
+where threads are kept running.
 
 - The underlying hardware threads are not necessarily uniform
 or homogeneous, they can be hierarchical,
@@ -699,11 +703,12 @@ and support different execution models
 vs. homogeneous processor grid).
 All these configurations can be represented using a homogeneous block hierarchy.
 
-Ripple implements this distinction for execution units with a costly transition
-between parallel and sequential executions, such as multi-thread and multi-core
-systems.
-Hence, for these levels of parallelism, all blocks declared with `ripple_thd_set_block_shape()` are a representation of the same threads from the
-underlying runtime.
+Ripple implements this distinction for execution units that have
+a costly transition between parallel and sequential executions,
+such as multi-thread and multi-core systems.
+Hence, for these levels of parallelism, all blocks declared with
+`ripple_thd_set_block_shape()` are a representation of the same threads
+from the underlying runtime.
 The block's shape can be changed by declaring a new thread block,
 but all blocks associated with a given underlying runtime object
 use the same number of underlying threads.
