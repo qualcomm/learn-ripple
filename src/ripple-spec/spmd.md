@@ -1,4 +1,4 @@
-# The Single Program, Multiple Data (SPMD) programming model in Ripple
+# The Ripple Single Program, Multiple Data (SPMD) programming model for vector machines
 
 SPMD is a way to express parallel computations in programs
 where repetitive work needs to be distributed
