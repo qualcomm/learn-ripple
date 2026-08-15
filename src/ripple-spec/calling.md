@@ -41,7 +41,7 @@ Ripple also supports the call of scalar library functions.
 There are three scenarios, when a function call depends upon a `ripple_id()`:
 - the scalar library function is defined in the same module as the caller.
   In this case, the callee needs to be inlined.
-- The scalar function has a vector implementation know to Ripple through its
+- The scalar function has a vector implementation known to Ripple through its
  [vector bitcode library](../ripple-spec/bc-lib.md) mechanism.
 In this case, Ripple calls that vector implementation.
 - the scalar library function is known but its definition is external
@@ -55,7 +55,7 @@ Users who wish to use math functions (such as sqrt, exp, etc.) should
 include `ripple_math.h`.
 One advantage of `ripple_math.h` is that
 it also defines 16-bit floating point versions of the math function.
-The naming convention for float16 functions in C
+The naming convention for float16 functions in Ripple
 follows the existing one in the C standard library,
 based on a suffix, where the suffix is `f16`.
 For instance, for sqrt, we have:
