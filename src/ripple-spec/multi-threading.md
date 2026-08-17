@@ -16,7 +16,7 @@ Similar to the SIMD programming model,
 the loop annotation style is syntactic sugar provided by Ripple
 on top of SPMD. As a result, both styles can be mixed if necessary.
 
-### Binding Ripple to a threading runtime
+## Binding Ripple to a threading runtime
 Ripple thread block objects communicate with an underlying threading runtime,
 through a runtime object representing said underlying runtime.
 To declare a thread block in Ripple, we need to initialize the underlying
@@ -61,32 +61,38 @@ Not using them saves some initialization time and runtime object space.
 /// barriers)
 #define RIPPLE_THD_NONE 0
 ```
+## Supported runtimes
+### Hexagon: QuRT vs QHPI
 
-`max_dims` is currently 3 for all runtimes, and `n_blocks` is limited to `1`
-in the QHPI underlying runtime.
+Ripple currently supports multi-threading through QuRT and QHPI,
+which are both multi-threaded environments for the Qualcomm Hexagon (R)
+processor.
+Hexagon is SnapDragon (R)'s most common Neural Processing Unit (NPU).
+The following table performs a comparison of QuRT vs QHPI.
 
-For each supported underlying threading runtime,
-Ripple uses a different type of underlying threading runtime object.
-These can also be used to save boilerplate thread initialization and
-termination code.
-Supported runtimes and their underlying runtime are represented
-in the following table:
+| Aspect | QuRT | QHPI |
+|---|---|---|
+| Role | Real-Time OS runtime on Hexagon | QAIRT/QNN custom-kernel runtime |
+| Typical use | General Hexagon-side threading/runtime programming | Writing custom kernels/operators inside a QNN/QAIRT or ExecuTorch execution environment |
+| Who owns thread creation? | Your code/runtime creates and manages QuRT threads | QHPI environment provides an ambient multi-threaded environment |
+| Main entry point style | Posix thread fork-join style | QHPI invokes your kernel with a runtime handle and tensor arguments, and has language to express how a layer execution gets decomposed into kernel calls |
+| Memory model | You manage allocation, stack, thread-local buffers, shared memory, etc. | Works within memory/tensor buffers managed by QNN/QAIRT and declared using QHPI |
+| Best suited for | Standalone Hexagon libraries, tests, direct access to the Hexagon NPU | Custom QNN/QAIRT/ExecuTorch kernels integrated into AI graphs |
+| Typical build artifact | Shared library linked against QuRT | QNN/QAIRT custom-op package |
+| Complexity | More boilerplate: initialize runtime, create threads, join, tear down | Less explicit threading boilerplate; more framework/QNN packaging complexity |
+| Runtime object | `qthd_runtime_t` | `QHPI_RuntimeHandle *` |
+| Ripple header (`#include`) | `ripple/ripple_thd_qurt.h`| `ripple/ripple_thd_qhpi.h` |
+| Ripple library flag | `-lripple_thd_qurt` | `-lripple_thd_qhpi` |
+| Max # blocks | 2 | 1 |
+| Max # thread dimensions | 3 | 3 |
 
-| Runtime | Underlying Type | Include | Link with |
-|---------|----------------|----------|-----------|
-| QuRT    | `qthd_runtime_t` | `ripple/ripple_thd_qurt.h` |`-lripple_thd_qurt` |
-| QHPI    | `QHPI_RuntimeHandle`|`ripple/ripple_thd_qhpi.h` | `-lripple_thd_qhpi` |
+Ripple multi-thread libraries are located in the tools' `target/lib/` subfolders.
 
-How underlying runtimes are initialized, and how the threads are spawned,
-are defined on a per-runtime basis.
-For instance, QHPI offers an environment in which the threads are
-already running, and the underlying runtime object is already initialized.
-Conversely, the underlying runtime object in QuRT needs to be initialized before
-spawning the threads.
+Additional documentation about [QHPI](https://docs.qualcomm.com/doc/80-63442-10/topic/qhpi_8h.html) and [QuRT](https://www.freecodecamp.org/news/qurt-the-real-time-os-inside-your-phone-s-processor-full-handbook/) can be found online.
 
-We will see how to create an underlying runtime object and spawn threads
-for [QuRT](#qurt-specific-api) and [QHPI](#qhpi-specific-api)
-later in this document.
+Further sections below also provide examples of QuRT and QHPI multi-threaded programs.
+
+Now that we know how to bind the Ripple thread runtime to an underlying threading runtime, let us look at how to express multi-thread parallelism with Ripple.
 
 ### SPMD API
 ```C
@@ -164,11 +170,9 @@ void ripple_thd_parallel(ripple_thd_block_t b, unsigned chunk_size, int flags, u
 void ripple_thd_parallel_dyn(ripple_thd_block_t b, unsigned chunk_size, int flags, unsigned ... dims);
 ```
 
-
 ### QuRT-specific API
 While the API above is universal across runtimes,
-we rely on a few runtime-specific APIs to make the use of multi-threaded Ripple 
-easier for some runtimes.
+we rely on a few runtime-specific APIs to make the use of multi-threaded Ripple easier for some runtimes.
 
 ```C
 /// \brief Synchronously calls \p func with \p args from all threads.
@@ -750,8 +754,16 @@ and a work-stealing-based scheduling algorithm.
 __[1]__ C. Rosetti, Ph. Clauss, "Algebraic Tiling," IMPACT 2023,
 13th International Workshop on Polyhedral Compilation Techniques.
 
-OpenMP is a registered trademark of the OpenMP Architecture Review Board.
+Hexagon and SnapDragon are registered trademarks of Qualcomm Incorporated
 
 The Intel (R) ISPC Compiler is a trademark of Intel Corporation.
 
+OpenMP is a registered trademark of the OpenMP Architecture Review Board.
+
 The oneAPI Thread Building Blocks (R) is a trademark of Intel Corporation.
+
+POSIX is a registered trademark of The Institute of Electrical and Electronics
+Engineers, Incorporated.
+
+*Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear*
