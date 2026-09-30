@@ -216,6 +216,16 @@ void ripple_parallel(int pe_id, int ... dims);
 /// The list of dimensions in \p dims is ordered.
 /// This generates the full-vector loop only.
 void ripple_parallel_full(int pe_id, int ... dims);
+
+/// Followed by a loop with simple initialization and upper bound,
+/// tells the compiler to distribute the processing elements identified by
+/// \p pe_id along dimension \p dims of the block of said processing elements.
+/// The list of dimensions in \p dims is ordered.
+/// This generates a vectorized  full-vector loop, but a sequential epilogue.
+/// This API is only supported when the loop body is elementwise.
+// Using ripple_parallel_seq on loops whose body is non-elementwise will result
+// in incorrect code.
+void ripple_parallel_peel(int pe_id, int ... dims);
 ```
 
 

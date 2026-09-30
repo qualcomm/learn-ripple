@@ -72,7 +72,7 @@ The following table performs a comparison of QuRT vs QHPI.
 
 | Aspect | QuRT | QHPI |
 |---|---|---|
-| Role | Real-Time OS runtime on Hexagon | QAIRT/QNN custom-kernel runtime |
+| Role | Real-Time OS runtime on Hexagon | QAIRT/QNN/ExecuTorch custom-kernel runtime |
 | Typical use | General Hexagon-side threading/runtime programming | Writing custom kernels/operators inside a QNN/QAIRT or ExecuTorch execution environment |
 | Who owns thread creation? | Your code/runtime creates and manages QuRT threads | QHPI environment provides an ambient multi-threaded environment |
 | Main entry point style | Posix thread fork-join style | QHPI invokes your kernel with a runtime handle and tensor arguments, and has language to express how a layer execution gets decomposed into kernel calls |
@@ -84,7 +84,8 @@ The following table performs a comparison of QuRT vs QHPI.
 | Ripple header (`#include`) | `ripple/ripple_thd_qurt.h`| `ripple/ripple_thd_qhpi.h` |
 | Ripple library flag | `-lripple_thd_qurt` | `-lripple_thd_qhpi` |
 | Max # blocks | 2 | 1 |
-| Max # thread dimensions | 3 | 3 |
+| Max # thread dimensions | 2 (3 coming up) | 2 (3 coming up) |
+
 
 Ripple multi-thread libraries are located in the tools' `target/lib/` subfolders.
 
@@ -170,24 +171,24 @@ void ripple_thd_parallel(ripple_thd_block_t b, unsigned chunk_size, int flags, u
 void ripple_thd_parallel_dyn(ripple_thd_block_t b, unsigned chunk_size, int flags, unsigned ... dims);
 ```
 
-### QuRT-specific API
+### API usage in QuRT
 While the API above is universal across runtimes,
 we rely on a few runtime-specific APIs to make the use of multi-threaded Ripple easier for some runtimes.
-
-```C
-/// \brief Synchronously calls \p func with \p args from all threads.
-void ripple_thd_call(ripple_thd_block_t b, void *(*func)(void *), void *args);
-```
 
 The QuRT-specific runtime object, which represents QuRT to Ripple,
 is created and destroyed using the following API:
 ```C
+#include "ripple/ripple_thd_qurt.h"
+
 /// @brief Creates a qthread-based environment that runs @p n_thd threads,
 /// Which can be used to create a Ripple block.
 extern qthd_runtime_t *qthd_runtime_init(unsigned n_thd);
 
 /// @brief Tears down the qthread-based environment
 extern void qthd_runtime_exit(qthd_runtime_t *rt);
+
+/// \brief Synchronously calls \p func with \p args from all threads.
+void ripple_thd_call(qthd_runtime_t * b, void *(*func)(void *), void *args);
 ```
 
 To create a multi-threaded function with the SPMD model,
@@ -252,17 +253,17 @@ int main() {
   // In QuRT, Ripple thread runtime is bound to Ripple blocks
   // BEFORE spawning the threads.
   // We're only planning to use one-dimensional thread blocks.
-  ripple_thd_block_t b = ripple_thd_init(THREADS, rt, /*n_blocks*/1,
-                                         /*flags*/RIPPLE_THD_DFT,
-                                         /*max_dims*/1);
+  rt = ripple_thd_init(THREADS, rt, /*n_blocks*/1,
+                                    /*flags*/RIPPLE_THD_DFT,
+                                    /*max_dims*/1);
   args_t args = {N, A, B, SUM};
   // This API is runtime-specific (here it comes from ripple_thd_qurt.h)
-  ripple_thd_call(b, vecadd, &args); // synchronous call, args doesn't escape
+  ripple_thd_call(rt, vecadd, &args); // synchronous call, args doesn't escape
   qthd_runtime_exit(rt);
 }
 ```
 
-### QHPI-specific API
+### API usage in QHPI
 
 QHPI offers an ambient multi-threaded environment, and passes its runtime
 object directly to the kernels.
@@ -294,7 +295,7 @@ uint32_t vecadd(QHPI_RuntimeHandle *rt,
   ripple_thd_init(THREADS, rt, /*n_blocks*/1, /*flags*/RIPPLE_THD_DFT, /*max_dims*/1);
   ripple_thd_block_t thdb =
     ripple_thd_set_block_shape(rt, /*block*/0, /*n_dims*/1, RIPPLE_THD_DYNAMIC);
-  size_t thd_id = ripple_thd_id(thdb, /*dimension*/ 0);
+  size_t thd_id = ripple_thd_id(thdb, /*dimension*/0);
   size_t n_thd = ripple_thd_get_block_size(thdb, /*dimension*/0);
   size_t chunk_size = (n + n_thd - 1) / n_thd;
   for (size_t i = thd_id * chunk_size; i < (thd_id + 1) * chunk_size; ++i) {
@@ -336,7 +337,7 @@ void * vecadd(void * vargs) {
   }
 }
 ```
-Ripple interprets the `ripple_thd_parallel()` API call, by refactoring the i
+Ripple interprets the `ripple_thd_parallel()` API call, by refactoring the `i`
 loop into a multi-threaded loop that assigns a contiguous block of `chunk_size`
 iterations to each thread. Except for the last one if `n` is not a multiple of
 `chunk_size`, in which case the last thread case is separated.
@@ -521,11 +522,10 @@ void * vecadd(void * vargs) {
 
 ## Barrier synchronization
 
-
 ### Most common use case
 
 The most basic use case for a barrier is
-to synchronize subsequent parallel sections of code.
+to synchronize all threads between elements of a sequence of parallel sections of code.
 
 In the following example, the `i` loop produces some values in `tmp`,
 which are consumed by statements in a following `k` loop.
@@ -682,7 +682,7 @@ The threading API is distinguished from the SIMD API by its prefix:
 The following table summarizes some of the major differences between Ripple thread blocks for SIMD and for threads.
 Following sections provide additional detail.
 
-| Ripple API | What it is | initialization cost | when to initialize |
+| Ripple API | What it is | Initialization cost | When to initialize |
 |------------|------------|---------------------|--------------------|
 | `ripple_block_t` | compiler abstraction to convey SIMD properties| None| At least once per function (can sometimes be passed to inlined functions and some vector lib functions)|
 | `ripple_thd_block_t` | runtime object to convey threading properties | Synchronization cost | When we need to modify the thread block shape. Otherwise, pass it around functions.|
