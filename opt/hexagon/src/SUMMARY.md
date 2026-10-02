@@ -6,6 +6,7 @@
 
 - [Generic optimization guide](./general-opt.md)
 - [Coalescing](./coalescing.md)
+- [Optimizing loops](./loop-opt.md)
 - [HVX-specific optimization](./hvx-opt.md)
 - [Profiling](./profiling.md)
 - [Debugging](./debugging.md)
