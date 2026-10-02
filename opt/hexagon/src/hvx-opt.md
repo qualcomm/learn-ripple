@@ -315,6 +315,7 @@ float SpVV(float * S, int32_t * S_index, size_t nS, float * V, size_t nV) {
   vtcm_free(gathered_V);
   return ripple_reduceadd(0b1, result);
 }
+```
 
 Since all addresses in the `hvx_gather` loop are conflict-free,
 all the data reorganization is done in parallel (up to the limits offered by
