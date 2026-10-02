@@ -149,7 +149,7 @@ In short, an optimal unroll factor is one that inserts independent instructions
 that can fill pipeline stalls and VLIW slots,
 without requiring more registers than the register file provides.
 
-# Multi-thread parallelism (cf. Ripple Manual)
+## Multi-thread parallelism (cf. Ripple Manual)
 Multi-threading is available through loop annotations using variants of `ripple_thd_parallel()`, or SPMD by directly using `ripple_thd_id()`.
 Only a parallel loop can be used for multi-threading.
 The choice of a loop is typically driven by data locality associated with it.
