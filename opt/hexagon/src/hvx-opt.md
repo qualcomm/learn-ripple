@@ -783,7 +783,7 @@ The behavior of `ripple_pair_chunked_zip` and `ripple_pair_chunked_unzip`
 is illustrated on Figure H2.
 
 ![ripple_pair_chunked_zip and ripple_pair_chunked_unzip function behavior](./hvx_pair_chunked.png  "hvx_pair_chunked_zip/unzip behavior")
-__Figure H1.__ pair_chunked_zip/unzip behavior
+__Figure H2.__ hvx_pair_chunked_zip/unzip behavior
 
 ### Constraints
 - `x`'s shape must fit exactly a pair of HVX vectors.
@@ -799,12 +799,12 @@ __Performance impact__: Medium.
 ```C
 #include <ripple/HVX_VectorPair.h>
 
-T hvx_pair_2x2_transpose(T x, size_t chunk_size);
-T hvx_pair_2x2 transpose_inc(T x, size_t chunk_sizes);
-T hvx_pair_2x2_transpose_dec(T x, size_t chunk_sizes);
+T hvx_pair_2x2_transpose(T a, size_t chunk_size);
+T hvx_pair_2x2 transpose_inc(T a, size_t chunk_sizes);
+T hvx_pair_2x2_transpose_dec(T a, size_t chunk_sizes);
 ```
 
-- `hvx_pair_2x2_transpose` considers `x` as a `chunk_size x 2 x n x 2` tensor `A`,
+- `hvx_pair_2x2_transpose` considers `a` as a `chunk_size x 2 x n x 2` tensor,
   where `chunk_size` is a power of two.
  The returned block is obtained by transposing the second and fourth dimensions,
  i.e., transposing `2x2` sub-tensors of element size `chunk_size`.
@@ -823,8 +823,8 @@ T hvx_pair_2x2_transpose_dec(T x, size_t chunk_sizes);
 
 The behavior of `hvx_pair_2x2_transpose` is illustrated on Figure H3.
 
-![ripple_pair_chunked_zip and ripple_pair_chunked_unzip function behavior](./hvx_pair_2x2_transpose.png  "hvx_pair_chunked_zip/unzip behavior")
-__Figure H1.__ pair_chunked_zip/unzip behavior
+![ripple_pair_2x2_transpose function behavior](./hvx_pair_2x2_transpose.png  "hvx_pair_2x2_transpose behavior")
+__Figure H3.__ hvx_pair_2x2_transpose behavior
 
 
 ### Constraints
