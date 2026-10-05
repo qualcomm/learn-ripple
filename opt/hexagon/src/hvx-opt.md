@@ -835,5 +835,5 @@ __Figure H3.__ hvx_pair_2x2_transpose behavior
 To use hvx_pair_2x2_transpose with multi-dimensional blocks, use `ripple_reshape`.
 
 ---
-*Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+*Copyright (c) 2024-2026 Qualcomm Innovation Center, Inc. All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause-Clear*
