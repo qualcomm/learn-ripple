@@ -765,5 +765,5 @@ The oneAPI Thread Building Blocks (R) is a trademark of Intel Corporation.
 POSIX is a registered trademark of The Institute of Electrical and Electronics
 Engineers, Incorporated.
 
-*Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+*Copyright (c) 2024-2026 Qualcomm Innovation Center, Inc. All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause-Clear*

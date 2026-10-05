@@ -15,5 +15,5 @@
 
 - [Other Ripple guides](./related-guides.md)
 
-*Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+*Copyright (c) 2024-2026 Qualcomm Innovation Center, Inc. All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause-Clear*

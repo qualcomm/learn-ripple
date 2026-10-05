@@ -215,6 +215,8 @@ using the `hvx_gather/hvx_scatter` API.
 
 ### Syntax
 ```C
+#include <ripple/HVX_Scatter_Gather.h>
+
 void hvx_gather(T * dst, T * src, OFF_T offset, OFF_T region_size);
 void hvx_scatter(T * dst, T src, OFF_T offset, OFF_T region_size);
 ```
@@ -346,6 +348,14 @@ latencies, which are all coalesced.
 ## Explicit bfloat16 conversions
 __Performance impact__: High.
 
+```C
+#include <ripple/HVX_Bfloat.h>
+
+__bf16 to_bf_trunc(float x);
+__bf16 to_bf_nan(float x);
+__bf16 to_bf_round(float x);
+```
+
 Ripple supports three types of conversions from `float` to `__bf16`:
 - `to_bf_trunc`, a direct truncation
 - `to_bf_nan`, a truncation that avoids incorrect NaN conversions (they can become an infinity using the direct shift)
@@ -354,7 +364,13 @@ Ripple supports three types of conversions from `float` to `__bf16`:
 ## Dynamic rotations
 __Performance impact__: Low.
 
-### `hvx_rotate_to_lower`
+### Syntax
+```C
+#include <ripple/HVX_Rotate.h>
+
+T hvx_rotate_to_lower(T, int32_t n);
+```
+where T is a base C type.
 
 `hvx_rotate_to_lower` is a rotation across elements of a
 block (interpreted as a one-dimensional block).
@@ -362,6 +378,8 @@ If B is the block size,
 `hvx_rotate_to_lower(x, n)` moves element `k` of `x`
 from index `k` to index `k - n modulo B`.
 Values of `n` must be between 0 and B - 1.
+
+Since `hvx_rotate_to_lower` is cyclic w.r.t. `n`, we can write a "`hvx_rotate_to_higher(x, n)`" as `hvx_rotate_to_lower(x, B - n)`.
 
 ### Example 1
 The following code snippet:
@@ -436,6 +454,8 @@ __Performance impact__: Medium.
 
 ### Syntax
 ```C
+#include <ripple/HVX_Narrow_Shift.h>
+
 narrow_t hvx_narsh[[_rnd]_sat][_noshuff](wide_t odd, wide_t even, uint32 shift);
 ```
 
@@ -478,6 +498,8 @@ __Performance impact__: High.
 
 ### Syntax
 ```C
+#include <HVX_Splice.h>
+
 T hvx_splice(T low, T high, size_t n);
 T hvx_lsplice(T low, T high, size_t n);
 ```
@@ -698,6 +720,120 @@ The speedup you will get will depend upon how successful clang was with its own 
 `high` and `low` shapes must correspond to
 the number of elements in one HVX Vector.
 
+## Chunked zipping and unzipping for pairs of HVX vectors
+__Performance impact__: Medium.
+### Syntax
+```C
+#include <ripple/HVX_VectorPair.h>
+
+T hvx_pair_chunked_zip(T x, size_t chunk_size);
+T hvx_pair_chunked_unzip(T x, size_t chunk_size);
+T hvx_pair_chunked_zip_list(T x, size_t chunk_size, size_t list_size);
+T hvx_pair_chunked_unzip_list(T x, size_t chunk_size, size_t list_size);
+```
+
+`hvx_pair_chunked_zip` and `hvx_pair_chunked_unzip`
+are useful data-dependent data reindexing functions
+for block sizes that correspond to 256 bytes.
+For example, if the chunk size parameter `chunk_size` is used in a loop.
+Data reorganization following a constant patterns can always be achieved using
+`ripple_shuffle()` or `ripple_shuffle_pair()`.
+
+The `zip` and `unzip` terms are defined as in python.
+- `hvx_pair_chunked_zip` considers the input `x` to be a pair
+  of sequences of chunks of size `chunk_size.
+  It returns a corresponding ("zipped") sequence of pairs (of chunks).
+
+  Explained from a tensor perspective,
+  `x` can be seen as a `chunk_size x n x 2` tensor,
+  whose last two dimensions gets transposed, into a `chunk_size x 2 x n` tensor.
+
+- `hvx_pair_chunked_unzip` is the opposite operation:
+  the input block is considered as a sequence of pairs of chunks,
+  and the output block is the corresponding pair of sequences of chunks.
+
+  Explained from a tensor perspective,
+  `x` can be seen as a `chunk_size x 2 x n` tensor,
+  whose last two dimensions gets transposed, into a `chunk_size x n x 2` tensor.
+
+- `hvx_pair_chunked_zip_list` considers `x` to be a pair of _lists_ of sequences
+  of chunks.
+  The sequence size `S` inside each list is defined by `chunk_size`
+  and `list_size` as `128 / sizeof(T) / chunk_size / list_size`.
+  For each list index, it zips both indexed input list elements
+  into a list of sequences of `S` zipped pairs of `chunk_size`-sized chunks.
+
+  Seen as a tensor, the input shape would be `chunk_size x S x list_size x 2`,
+  while the output shape would be `chunk_size x 2 x S x n_lists`.
+
+- `hvx_pair_chunked_unzip_list` performs the opposite operation.
+  It considers `x` to be a _list_ of sequences of pairs of chunks.
+  The input is a list of sequences of pairs of chunks, and
+  the output is a pair of lists of sequences of chunks.
+  The sequence size `S` inside each list is defined by `chunk_size` and
+  `list_size` as `128 / sizeof(T) / chunk_size / list_size`.
+  For each list index, `hvx_pair_chunked_unzip_list` unzips pairs of chunks in
+  the indexed input sequence into two sequences that are indexed in each element
+  of the output pair of lists.
+
+  Seen as a tensor, the input shape would be `chunk_size x 2 x S x list_size`,
+  while the output shape would be `chunk_size x S x n_lists x 2`.
+
+The behavior of `ripple_pair_chunked_zip` and `ripple_pair_chunked_unzip`
+is illustrated on Figure H2.
+
+![ripple_pair_chunked_zip and ripple_pair_chunked_unzip function behavior](./hvx_pair_chunked.png  "hvx_pair_chunked_zip/unzip behavior")
+__Figure H2.__ hvx_pair_chunked_zip/unzip behavior
+
+### Constraints
+- `x`'s shape must fit exactly a pair of HVX vectors.
+- `chunk_size` has to be a power of 2 and can be up to `32 / sizeof(T)`.
+- `list_size` must also be a power of two.
+
+To use hvx_pair_chunked_zip/unzip with multi-dimensional blocks, use `ripple_reshape`.
+
+## 2x2 subtensor transposition for pairs of HVX vectors
+__Performance impact__: Medium.
+
+### Syntax
+```C
+#include <ripple/HVX_VectorPair.h>
+
+T hvx_pair_2x2_transpose(T a, size_t chunk_size);
+T hvx_pair_2x2 transpose_inc(T a, size_t chunk_sizes);
+T hvx_pair_2x2_transpose_dec(T a, size_t chunk_sizes);
+```
+
+- `hvx_pair_2x2_transpose` considers `a` as a `chunk_size x 2 x n x 2` tensor,
+  where `chunk_size` is a power of two.
+ The returned block is obtained by transposing the second and fourth dimensions,
+ i.e., transposing `2x2` sub-tensors of element size `chunk_size`.
+ `n = 64 / chunk_size`.
+
+- `hvx_pair_2x2_transpose_inc` and `hvx_pair_2x2_transpose_dec`
+  accept a non-power of two `chunk_sizes` parameter.
+  However, it does not interpret `chunk_sizes` as a single chunk size,
+  but instead as a sequence of chunk sizes for which the subtensor transposition
+  defined by `hvx_pair_2x2_transpose` must be applied.
+  Each bit set in `chunk_sizes` defines a power-of-two chunk_size to be applied
+  in that sequence.
+  - `hvx_pair_2x2_transpose_inc` applies the transpositions hierarchically
+    by increasing order of chunk sizes, while `hvx_pair_2x2_transpose_dec`
+    applies the transpositions hiearchically by decreasing order of chunk sizes.
+
+The behavior of `hvx_pair_2x2_transpose` is illustrated on Figure H3.
+
+![ripple_pair_2x2_transpose function behavior](./hvx_pair_2x2_transpose.png  "hvx_pair_2x2_transpose behavior")
+__Figure H3.__ hvx_pair_2x2_transpose behavior
+
+
+### Constraints
+- `x`'s shape must be 1-d and fit exactly a pair of HVX vectors.
+- In `hvx_pair_2x2_transpose()`, `chunk_size` must be a power of two,
+  and is limited to `32 / sizeof(T)`.
+
+To use hvx_pair_2x2_transpose with multi-dimensional blocks, use `ripple_reshape`.
+
 ---
-*Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+*Copyright (c) 2024-2026 Qualcomm Innovation Center, Inc. All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause-Clear*
