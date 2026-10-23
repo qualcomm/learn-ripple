@@ -1,269 +1,350 @@
-# Ripple vector bitcode libraries
-Consider the case when Ripple determines that
-a function call statement should have a non-scalar shape.
-Ripple's role is to render code that corresponds to a SIMD execution
-of that (scalar) function.
-As detailed [here](./calling.md),
-the behavior of Ripple varies as a function of the information available:
+# Ripple vector libraries
 
-- **If no SIMD version of the scalar function is known to Ripple**
-  - If the scalar function definition is known, Ripple proceeds to create
-  a SIMD equivalent to the (scalar) function, with its arguments expanded
-  to their SIMD shape.The expanded version of the function call will be
-  a call to the SIMD equivalent function.
-  - If no such SIMD version of the function is known to Ripple,
-  Ripple calls the function sequentially for all the elements of the block.
+When a scalar function call has a non-scalar shape, Ripple can replace it with
+a SIMD implementation supplied by a vector library. A vector implementation is
+an ordinary C or C++ function marked with the `ripple_vector_candidate`
+attribute. It can be declared in a header, defined in the same translation unit
+or another one, and linked from an object or library like any other function.
 
-- **If a SIMD version of the function is available**
+Ripple discovers vector candidates from attributed declarations and
+definitions, then uses the function name and type to match them to shaped
+scalar calls.
 
-  Ripple will use the SIMD implementation directly (by calling the SIMD function).
-  This requires the SIMD version to be declared in a vector "bitcode library".
-  We describe this process in the next section.
-
-
-# Creating a bitcode library for Ripple
-## Custom library
-Ripple currently relies on a naming convention to recognize
-the relationship between a scalar function and its SIMD equivalent.
-
-Consider a toy example in which we want to
-create a vector elementwise multiplication function.
-Let us call the scalar version, to be used in the Ripple source,
-`elemprod`.
+In C and C++, the attribute can use GNU-style syntax:
 
 ```C
-extern "C" {
-float elemprod(float a, float b);
-}
+__attribute__((ripple_vector_candidate))
 ```
-To make it accessible to Ripple programmers,
-we would declare it in a C header, say `elem_ops.h`,
-and use it as in the example below:
+
+In C++11 and later, or C23 and later, it can also use standard attribute
+syntax with the `clang` namespace:
+
+```C++
+[[clang::ripple_vector_candidate]]
+```
+
+Compile translation units that use the attribute with `-fenable-ripple`.
+
+## Declaring a vector candidate
+
+Consider a scalar elementwise multiplication function named `elemprod`. The
+vector-library header, `elem_ops.h`, declares the scalar function and its
+vector implementation:
 
 ```C
+float elemprod(float a, float b);
+
+typedef float v8f32 __attribute__((vector_size(32)));
+
+__attribute__((ripple_vector_candidate))
+v8f32 ripple_ew_pure_elemprod(v8f32 a, v8f32 b);
+```
+
+Including this header makes the candidate visible to Ripple while it
+compiles a caller. The definition can live in another translation unit and be
+linked into the program with the rest of the library.
+
+For example, `foo.cc` uses the scalar function in a Ripple loop:
+
+```C++
+#include <cstddef>
 #include <ripple.h>
+// Declares elemprod and its Ripple vector candidate.
 #include <elem_ops.h>
 
 #define VECTOR_PE 0
 
-float foo(float * A, float * B, float * C, size_t n) {
+void foo(float *A, float *B, float *C, std::size_t n) {
   ripple_block_t block = ripple_set_block_shape(VECTOR_PE, 8);
   ripple_parallel(block, 0);
-  for (size_t i = 0; i < n; ++i) {
+  for (std::size_t i = 0; i < n; ++i)
     A[i] = elemprod(B[i], C[i]);
-  }
 }
 ```
-Ripple would infer shapes and determine that the shapes of `B[i]`
-and `C[i]` are [8].
-It would then look for a function:
-- whose name indicates that it is a vectorized version of `elemprod`, and
-- which takes vectors as its arguments.
-It would also check if such function can be used to implement
-a vector version of `elemprod` for the shape [8].
 
-Ripple looks for such a function in the current module,
-but also in special "bitcode" libraries provided to it through a
-clang command-line flag.
+Ripple infers that `B[i]` and `C[i]` have shape [8], finds the attributed
+candidate for `elemprod`, and replaces the scalar call with a call to
+`ripple_ew_pure_elemprod` when its type and shape are compatible.
 
-### Naming convention
-The vector implementation of a scalar function `foo` needs to be
-named as follows:
+## Naming convention
+
+The vector implementation of a scalar function `foo` is named as follows:
+
 ```C
-typedef float v8f32 __attribute__((vectorsize(32)));
-v8f32 ripple_<attributes>_<signature>_elemprod(v8f32 a, v8f32 b);
+ripple_<attributes>_<signature>_foo
 ```
 
-**\<attributes\>**
+The function must also have the `ripple_vector_candidate` attribute. The name
+describes how Ripple may use the implementation; the attribute tells Ripple
+which declarations and definitions it is allowed to inspect.
 
-A subset of the following strings, separated by `_` (underscores):
+### Attributes encoded in the name
 
-- `ew` specifies that the function is elementwise.
-Ripple uses this information to adjust the calls to, say,
- `ripple_ew_elemprod()` to the requested shape ([8]).
- To do so successfully, Ripple may also need a masked definition
- of the vector function (see below).
-- `pure` specifies that the function does not have side-effects
-(i.e., it does not read or write to any external memory element).
-Ripple uses that to avoid using masks in the case of elementwise functions.
-- `mask` specifies that the function is a masked implementation of `elemprod`.
-If the function call is controlled by a block-shaped conditional,
-the mask corresponding to this conditional is applied to the vector function.
-Masks are also used to adjust the effective size of the vector parameters,
-when that size is smaller than the provided implementation
-(for instance if the call's shape was [4]),
-or if there are leftover elements
-(for instance if the call's shape was [12] and it is elementwise).
+The optional attributes are separated by underscores:
 
-**\<signature\>**
+- `ew` specifies that the function is elementwise. Ripple can adapt an
+  elementwise implementation to a requested shape. This may require a masked
+  implementation. Its operands follow Ripple's
+  [implicit broadcasting rules](./spmd.md#implicit-broadcasting).
+- `pure` specifies that the function has no side effects: it does not read or
+  write externally visible memory. Ripple can use this information to avoid
+  masks in some elementwise cases.
+- `mask` specifies a masked implementation. Ripple uses masks for calls under
+  block-shaped conditionals and when adapting the implementation to smaller or
+  leftover shapes.
 
-Optionally encodes tensor specifications for arguments and return values:
+### Signature encoded in the name
 
-- `uniform_<tensor_shape>` — All arguments and return value share the same tensor shape.
-- Individual shapes:
-    - `argX_<tensor_shape>` — Shape of argument at index X (0-based).
-    - `ret_<tensor_shape>` — Shape of the return value.
+The optional signature describes tensor shapes for arguments and return
+values:
 
+- `uniform_<tensor_shape>` means all arguments and the return value have the
+  same tensor shape.
+- `argX_<tensor_shape>` describes argument `X`, using a zero-based index.
+- `ret_<tensor_shape>` describes the return value.
 
-**Tensor Shape Format**
+A tensor shape has this format:
 
-```
+```text
 t<dim0>x<dim1>x...<dimN><type>
 ```
 
-- `t` — Prefix for tensor.
-- `<dim0>x<dim1>x...<dimN>` — Dimensions.
-- `<type>` — Element type (e.g., i16 for 16-bit integer, f32 for 32-bit float).
+For example, `t32x1x3i16` represents a `Tensor[32][1][3]` of 16-bit
+integers. Dimensions of size one are trivial, so values such as `t1f32` and
+`t1x1f32` are scalar and do not require a signature component.
 
-For example, `t32x1x3i16` represents a tensor Tensor[32][1][3] of 16-bit integers.
+On Hexagon and x86-64, Ripple can infer one-dimensional tensor shapes from the
+function type when the vector size is valid for the target ABI. For unusual
+vector sizes that the ABI passes indirectly, encode the shape explicitly in
+the function name.
 
-Tensors with only trivial dimensions (size 1) are considered scalars, e.g.,
-t1f32 or t1x1f32. Scalars do not require a signature; Ripple will pass them as
-normal scalar values.
+On AArch64, explicitly encoding the shape of every tensor argument and the
+return value is highly recommended. Use `argX_<tensor_shape>` for each tensor
+argument and `ret_<tensor_shape>` for the return value. See
+[AArch64 shape signatures](#aarch64-shape-signatures) for details.
 
-If no match for a vectorized function is found, the function call is rendered
-as a sequence of calls.
+For example, a matrix-vector operation with these shapes:
 
-In our case, the product is elementwise and pure.
-We could implement a version for the Intel AVX (R) ISA as follows,
-in `elem_ops.cc`:
+- argument 0: `Tensor[8]` of `float`
+- argument 1: `Tensor[4][8]` of `float`
+- return value: `Tensor[4]` of `float`
+
+can be declared as:
 
 ```C
-#include <immintrin.h>
-extern "C" {
-// note: v8f32 == __m256
-typedef float v8f32 __attribute__((vectorsize(32)));
+typedef float t4f32 __attribute__((vector_size(16)));
+typedef float t8f32 __attribute__((vector_size(32)));
+typedef float t4x8f32 __attribute__((vector_size(128)));
 
-inline __attribute__((used, always_inline, weak, visibility("hidden")))
+__attribute__((ripple_vector_candidate))
+t4f32 ripple_pure_arg0_t8f32_arg1_t4x8f32_ret_t4f32_matvec(
+    t8f32 vector, t4x8f32 matrix);
+```
+
+Because the operation is not elementwise, its name omits `ew`. If Ripple can
+infer the one-dimensional shapes, the shorter
+`ripple_pure_arg1_t4x8f32_matvec` name is equivalent.
+
+When choosing the vector size of an implementation, prefer a size for which
+the target executes the operation efficiently.
+
+## Providing the implementation
+
+Vector candidates use ordinary C/C++ definitions. The corresponding
+`elem_ops.cc` can provide both the scalar implementation and its vector
+candidate:
+
+```C++
+#include <immintrin.h>
+#include <elem_ops.h>
+
+float elemprod(float a, float b) {
+  return a * b;
+}
+
+__attribute__((ripple_vector_candidate))
 v8f32 ripple_ew_pure_elemprod(v8f32 a, v8f32 b) {
   return _mm256_mul_ps(a, b);
 }
+```
+
+Regular scalar calls use `elemprod`. Calls on Ripple-shaped operands use
+`ripple_ew_pure_elemprod`; because it is an `ew` candidate, Ripple adapts the
+implementation to the elementwise call shape. Both functions can be defined
+and linked as part of the same library.
+
+Compile the implementation and caller into object files, then include both in
+the application's normal link step. In this example, `main.o` represents the
+rest of the application:
+
+```bash
+clang++ --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -mavx -I. \
+  -c elem_ops.cc -o elem_ops.o
+clang++ --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -mavx -I. \
+  -c foo.cc -o foo.o
+clang++ --target=x86_64-unknown-linux-gnu -O2 -mavx \
+  main.o foo.o elem_ops.o -o app
+```
+
+The implementation can also be packaged in a static or shared library. Its
+symbol visibility and linkage follow the usual C/C++ rules.
+
+### C++ linkage and namespaces
+
+Ripple supports C++ symbol name mangling, so candidates may use C++ linkage.
+For functions in a named namespace, the scalar function and its vector
+candidate must be in the same namespace. Ripple matches the namespace, scalar
+function name, and compatible function type; a candidate in a different named
+namespace is not selected.
+
+```C++
+namespace math {
+float add(float a, float b);
+
+[[clang::ripple_vector_candidate]]
+v8f32 ripple_ew_pure_add(v8f32 a, v8f32 b);
+} // namespace math
+```
+
+For candidate matching, Ripple treats the global namespace and an anonymous
+namespace as equivalent. A global scalar function can therefore map to a
+candidate in an anonymous namespace, and an anonymous-namespace scalar
+function can map to a global candidate. Neither form matches a scalar function
+in a named namespace; that candidate must be declared in the same named
+namespace. This matching rule does not change C++ linkage: an
+anonymous-namespace candidate still has internal linkage and must be defined
+in the translation unit that uses it.
+
+Use `extern "C"` when the library exposes a C ABI.
+
+## Header-only libraries
+
+A candidate definition can be `static inline` in a header. Because the
+definition and its attribute are present in each consuming translation unit,
+Ripple can select it and the normal optimizer can inline it.
+
+```C++
+typedef float v8f32 __attribute__((vector_size(32)));
+
+[[clang::ripple_vector_candidate]]
+static inline v8f32 ripple_ew_pure_elemprod(v8f32 a, v8f32 b) {
+  return a * b;
 }
 ```
-It is important to declare `ripple_ew_pure_elemprod` in a `"C"` linkage region,
-in order to preserve the function name when a C++ compiler is used.
-C++ mangles function names with operand types,
-which prevents Ripple from matching the
-scalar function name with its vector equivalent.
 
-We also recommend that you use the set of attributes used here
-for `ripple_ew_pure_elemprod`,
-in order to minimize compiler warnings and enable inlining of the vector
-function (if desired).
+Internal-linkage candidates, including `static` functions and functions in an
+anonymous namespace, are local to their translation unit. External candidates
+may be defined in another translation unit.
 
-### Automatic 1D Shape Recognition
+The C and C++ `inline` keyword does not require the compiler to inline a
+function. To bypass the normal inlining heuristics, a header-only candidate can
+also use Clang's `always_inline` attribute:
 
-For targets whose ABI has well-defined vector argument types, Ripple can infer
-1D tensor shapes directly from the type system. For unconventional vector
-sizes, the ABI may dictate passing by pointer. In such cases, Ripple may not be
-able to infer the correct tensor shape, so a manually specified tensor shape
-through signature annotation is required.
+```C++
+[[clang::ripple_vector_candidate, clang::always_inline]]
+static inline v8f32 ripple_ew_pure_elemprod(v8f32 a, v8f32 b) {
+  return a * b;
+}
+```
 
-### Signature Example: Matrix–Vector (Vector + 2D Tensor)
+The GNU-style spelling is
+`__attribute__((ripple_vector_candidate, always_inline))`. Clang will always
+attempt to inline an `always_inline` function, although inlining can still be
+impossible in some cases. `always_inline` is a compiler extension; C and C++ do
+not currently define a standard force-inline attribute.
 
-Shapes (row-major):
+## LTO
 
-- `arg0` = `Tensor[8]` of f32 (vector)
-- `arg1` = `Tensor[4][8]` of f32 (matrix with 4 rows × 8 cols)
-- return = `Tensor[4]` of f32 (vector)
+Vector candidates also work with full LTO and ThinLTO. Put the attributed
+declaration in the header visible to the caller and compile the participating
+translation units with the usual `-flto` or `-flto=thin` options. Ripple makes
+the candidate selection from the declarations and definitions visible during
+compilation. The compiler and linker can then optimize and resolve those
+symbols across translation units.
 
-Signature encoding:
+For example:
 
-- `arg0_t8f32`
-- `arg1_t4x8f32`
-- `ret_t4f32`
+```bash
+clang++ --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -mavx -flto -I. \
+  -c elem_ops.cc -o elem_ops.o
+clang++ --target=x86_64-unknown-linux-gnu -O2 -fenable-ripple -mavx -flto -I. \
+  -c foo.cc -o foo.o
+clang++ --target=x86_64-unknown-linux-gnu -O2 -mavx -flto \
+  main.o foo.o elem_ops.o -o app
+```
 
-Because this is not **elementwise**, omit ew. Add pure because there is no
-side-effects in the matrix-vector operation.
+Compile `main.o` and the application's other LTO objects for the same target
+with compatible target options. Replace `-flto` with `-flto=thin` throughout
+to use ThinLTO.
+
+## Selecting a candidate with a block shape
+
+Ripple normally selects a vector candidate from the tensor shapes of the
+scalar call's arguments. There is also a special form for an externally
+declared scalar function whose call has no non-scalar tensor arguments. Its
+first argument can be a `ripple_block_t` that supplies the shape used to select
+the vector candidate:
 
 ```C
-typedef float t4f32 __attribute__((vectorsize(16)));    // 4 lanes of f32
-typedef float t8f32 __attribute__((vectorsize(32)));    // 8 lanes of f32
-typedef float t4x8f32 __attribute__((vectorsize(128))); // 4x8 block (conceptual)
+extern float read_value(ripple_block_t block, int index);
 
-t4f32 ripple_pure_arg0_t8f32_arg1_t4x8f32_ret_t4f32_matvec(t8f32 vec, t4x8f32 matrix);
+typedef float v4f32 __attribute__((vector_size(16)));
 
-// Ripple can often infer 1D tensor shapes; the following declaration is equivalent and less verbose:
-t4f32 ripple_pure_arg1_t4x8f32_matvec(t8f32 vec, t4x8f32 matrix);
+__attribute__((ripple_vector_candidate))
+v4f32 ripple_ret_t1x4f32_read_value(int index);
 ```
 
-#### Optimal implementation size
+The block shape is part of the scalar interface only. Ripple removes that
+argument when it replaces the call, so the vector candidate receives `index`
+but not `block`. The block must therefore be used only to describe the call's
+shape; the candidate cannot inspect it or use it in its implementation.
 
-When in doubt about the size of vector parameters for a vector implementation,
-we recommend to use a size for which the computation is optimally efficient.
+The `ripple_block_t` must be the first source-level argument. Additional
+arguments are allowed, but they must have scalar Ripple shapes and are passed
+unchanged to the candidate. This includes vector-typed values that have a
+scalar Ripple shape. The attributed candidate declaration must be visible
+while compiling the caller, and its definition can be linked from another
+object or library.
 
-### Function Without Argument
+This external-candidate form is distinct from passing block shapes into a
+function that uses them. In that case Ripple specializes the scalar function,
+the block-shape arguments may appear at any positions, and the scalar
+definition must be available in the same compilation unit as the caller. See
+[Passing block shapes to functions](./calling.md#passing-block-shapes-to-functions)
+for the specialization rules.
 
-Ripple selects external functions based on the tensor shapes of the arguments at
-the call site inside a ripple-enabled function. If a function does not have any
-tensor argument, the scalar function call is not modified; ripple will ignore
-it.
+## Standard vector libraries
 
-In order to allow for external functions taking no tensor argument, ripple
-defines a special API using the block shape value. This API is often useful to
-access constants or hardware accumulators/storage.
+A Ripple distribution may provide target-specific candidates for operations
+such as optimized math functions or special SIMD instructions. These
+candidates follow the same rules as custom libraries: their headers expose
+attributed declarations or definitions, and their symbols are supplied through
+the target's libraries.
 
-The API is as follows:
+## Advanced: inspecting LLVM IR
 
-- The scalar definition has a unique `ripple_block_t` argument:
-    ```c
-    extern float myFunction(ripple_block_t BS);
-    ```
-- The ripple function definition follows the regular naming convention
-and takes `void` as argument (or none in C++):
-    ```c
-    typedef float t4f32 __attribute__((vectorsize(16))); // 4 lanes of f32
-    t4f32 ripple_ret_t4f32_myFunction(void);
-    ```
+When debugging generated LLVM IR, an attributed C/C++ function carries the
+`ripple-vector-candidate` LLVM function attribute. This spelling uses hyphens,
+whereas the source-level `ripple_vector_candidate` spelling uses underscores.
 
-**Usage example:**
+### AArch64 shape signatures
 
-```c
-float foo(float * A, size_t n) {
-  ripple_block_t block = ripple_set_shape(0, 4);
-  ripple_parallel(block, 0);
-  for (size_t i = 0; i < n; ++i) {
-    A[i] = myFunction(block);  // Ripple transforms this to call ripple_ret_t4f32_myFunction()
-  }
-}
+With the current AArch64 frontend lowering, the ABI may represent some vector
+parameters or return values without preserving their original type in LLVM IR.
+As a result, shape inference from an `ew` candidate or a
+`uniform_<tensor_shape>` signature may not always identify the intended
+function type.
+
+For AArch64 vector libraries, explicitly describe the return value and every
+tensor argument with `ret_<tensor_shape>` and `argX_<tensor_shape>`. Keep `ew`
+when the operation is elementwise, but do not rely on it alone to communicate
+the shapes. For example:
+
+```C
+__attribute__((ripple_vector_candidate))
+t4f32 ripple_ew_pure_ret_t4f32_arg0_t4f32_arg1_t4f32_myadd(
+    t4f32 a, t4f32 b);
 ```
-
-When calling this function from within a ripple-enabled region with an active
-block shape, Ripple will transform the call by removing the `ripple_block_t`
-argument and invoking the external vector function, which returns a tensor
-matching the function's specified return shape.
-
-### Compilation
-
-Now the library source file can be turned into a bitcode representation using
-```bash
-clang elem_ops.cc -c -emit-llvm -o elem_ops.bc
-```
-Bitcode libraries have the `.bc` extension.
-Of course, if the `elem_ops.cc` functions are implemented using Ripple, you also need to pass the `-fenable-ripple` flag in the command above.
-
-### Declaration to Ripple
-For Ripple to have access to the `elem_ops` bitcode library,
-we need to pass its path to the command-line when compiling `foo.cc`:
-```bash
-clang foo.cc -fenable-ripple -fripple-lib elem_ops.bc
-```
-
-## Ripple standard vector library
-As a target-agnostic compiler pass, Ripple allows us to write code that
-is not specific to a target.
-However, developers needing to exploit target-specific features,
-such as special SIMD instructions or target-optimized math functions can
-use bitcode libraries to access these.
-
-Target-specific APIs presented in this manual are implemented as a bitcode
-library, included by default by clang.
-It is somehow a "standard" or "default" bitcode library.
-
-### Multi-lib organization
-
-The Ripple standard bitcode library is organized as a multi-lib,
-i.e. there may be different versions of a function per processor and ISA version.
 
 ---
 *Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
