@@ -36,24 +36,38 @@ $ clang -fenable-ripple -O2 [other options] my_prog.cpp
 When a call to a scalar function has a shape,
 Ripple tries to find a vector equivalent of the scalar function
 that can be used with said shape.
-To support this, Ripple comes with a "default" vector library
-for architecture-specific functions.
-However, users can also define vector libraries for Ripple
-(as explained in the Ripple Documentation).
-One way these libraries are made available is
-by compiling them to the LLVM "bitcode" format (`.bc` extension).
-For instance, you or someone else may have made a `my_lib.bc` Ripple vector library available
-in a folder, for instance `/usr/lib/ripple/my_lib.bc`.
-In that case, it is necessary to tell clang where to look for Ripple libraries,
-using the `-fripple-lib` flag, as follows:
+Ripple considers only declarations and definitions marked with the
+`ripple_vector_candidate` function attribute. The candidate must be declared
+in the translation unit that contains the scalar call, normally by including
+the vector library's header:
 
-```bash
-$ clang -fripple-lib=/usr/lib/ripple`
+```C
+typedef float v32f32 __attribute__((vector_size(128)));
+
+__attribute__((ripple_vector_candidate))
+v32f32 ripple_ew_pure_my_function(v32f32);
 ```
-without this flag, Ripple will not detect the vector version to use, and will
-create sequential calls to the scalar function.
-If the scalar function is not defined in the input code or in a library,
-the linker will fail with a undefined symbol error.
+
+Compile the caller with `-fenable-ripple`. Supply an external candidate's
+definition through the normal object, static-library, shared-library, or LTO
+linking flow.
+
+If the attributed declaration is missing or incompatible with the call's
+shape, Ripple will not select the candidate and may create sequential scalar
+calls. If the selected vector candidate or the fallback scalar function has no
+linked definition, the linker will report an undefined symbol.
+
+For C++ functions, also check the namespace. A scalar function and its
+candidate must use the same named namespace. Ripple treats the global and
+anonymous namespaces as equivalent for matching.
+
+With the current AArch64 frontend lowering, the ABI may obscure vector
+parameter and return types in LLVM IR. If an `ew` or
+`uniform_<tensor_shape>` candidate is not selected, use explicit
+`ret_<tensor_shape>` and `argX_<tensor_shape>` components for the return value
+and every tensor argument. An elementwise candidate should still retain `ew`;
+the explicit signature supplies the shape information that cannot be inferred
+reliably on this target.
 
 ## Non-deterministic SIMD writes
 __Effect__: Compilation error.
