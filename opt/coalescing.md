@@ -188,17 +188,25 @@ into two registers, and _then_ rearrange the data inside the registers,
 as follows:
 
 ```C
+/// First half comes from the even indices, second half from the odd ones.
+size_t separate_re_im(size_t i, size_t n) {
+    return (i < n / 2) ? 2 * i : 2 * (i - n / 2) + 1;
+}
 
 float norm(float vec[32][2]) {
-  ripple_block_t BS = ripple_set_block_shape(VECTOR, 32, 2);
-  size_t v0 = ripple_id(BS, 0);
-  size_t v1 = ripple_id(BS, 1);
-  float all_data = vec[2 * v0 + v1];;
-  return ripple_reduceadd(0b01, ripple_reducemul(0b10, all_data));
+  ripple_block_t vector_of_pairs = ripple_set_block_shape(VECTOR, 2, 32);
+  size_t pair_element = ripple_id(vector_of_pairs, 0);
+  size_t pair_index = ripple_id(vector_of_pairs, 1);
+  float interleaved = vec[pair_index][pair_element];
+  float separated = ripple_shuffle(interleaved, separate_re_im);
+
+  ripple_block_t pair_of_vectors = ripple_set_block_shape(VECTOR, 32, 2);
+  float real_and_im = ripple_reshape(pair_of_vectors, separated);
+  return ripple_reduceadd(0b01, ripple_reducemul(0b10, real_and_im));
 }
 ```
 
-Thus, with 4 additional lines of code, we can go down from 64 loads
+Thus, with a few additional lines of code, we can go down from 64 loads
 (assuming each scalar in the strided loads have to be loaded separately)
 to 2 (vector) loads.
 
@@ -215,12 +223,15 @@ size_t take_imag_from_pair(size_t i, size_t n) {
 }
 
 float norm(float vec[32][2]) {
-  ripple_block_t BS = ripple_set_block_shape(VECTOR, 32);
-  size_t v0 = ripple_id(BS, 0);
-  size_t v1 = ripple_id(BS, 1);
-  float all_data = vec[v0][v1];
-  float first = *(vec + v0);
-  float second = *(vec + 32 + v0);
+  ripple_block_t vector_of_pairs = ripple_set_block_shape(VECTOR, 2, 32);
+  size_t pair_element = ripple_id(vector_of_pairs, 0);
+  size_t pair_index = ripple_id(vector_of_pairs, 1);
+  float interleaved = vec[pair_index][pair_element];
+
+  ripple_block_t pair_of_vectors = ripple_set_block_shape(VECTOR, 32, 2);
+  float pair_of_vectors_view = ripple_reshape(pair_of_vectors, interleaved);
+  float first = ripple_slice(pair_of_vectors_view, -1, 0);
+  float second = ripple_slice(pair_of_vectors_view, -1, 1);
   float real =
     ripple_shuffle_pair(first, second, take_real_from_pair);
   float imag =
