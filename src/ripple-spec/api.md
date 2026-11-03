@@ -1,6 +1,7 @@
 # The Ripple API specification
 
 ## C API (SPMD)
+
 ```C
 /// \brief returns a block shape for processing element with id \p pe_id
 ripple_block_t ripple_set_block_shape(int pe_id, size_t ... shape);
@@ -127,55 +128,38 @@ TYPE ripple_sub_sat(TYPE x, TYPE y);
 /// \brief Similar to `ripple_add_sat`, but performs left shift.
 TYPE ripple_shl_sat(TYPE x, TYPE y);
 
-/// \brief Converts a 1-d Ripple block of T to a <N_EL x T> C vector.
-/// \param N_EL the number of elements of the output vector.
-///             Would normally match the total Ripple block size,
-///             but can be bigger.
-/// \param T the vector's element type - you can pass it as a parameter 
-///          because ripple_to_vec is a macro.
-/// \param PE_ID the processing element ID
-///              for which this conversion is made.
-/// \param x the Ripple (block) value that needs to be converted
-///          to a C  vector
-T __attribute__(vector_size(sizeof(T) * N_EL))
-ripple_to_vec(size_t N_EL, T, int PE_ID, T x);
+/// Converts a Ripple value to a native vector of N_EL elements.
+/// N_EL must be a positive integer constant; N_EL == 1 returns a scalar.
+/// The output element type is inferred from x; the conversion preserves bits.
+/// N_EL fixes the native output size at compile time. For a varying x, the
+/// compiler checks that it matches the lane count of x's propagated block shape.
+/// Preserving the element type and total bit width also preserves the lane count.
+/// A mismatch is a compiler error.
+/// See Shape constraints below for uniform-scalar broadcast and specialization.
+/// If you need to convert element values before export, cast x explicitly.
+/// Example: if x is an int32_t Ripple value with shape [32], then
+/// ripple_to_vec(32, x) returns a native vector of 32 int32_t elements.
+/// ripple_to_vec(32, (float)x) returns 32 floats: 1 becomes 1.0f.
+/// These are macro call forms, rather than function declarations:
+ripple_to_vec(N_EL, x);
 
-/// \brief Same as ripple_to_vec,
-/// for a 2-d block made of the 2 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 2 dimensions.
-T __attribute__(vector_size(sizeof(T) * N_EL))
-ripple_to_vec_2d(size_t N_EL, T, int PE_ID, T x);
+/// Converts a native vector to a Ripple value with the shape of BS.
+/// The native vector type fixes the element type and count at compile time.
+/// The conversion preserves the element type and total bit width, hence lane count.
+/// BS must contain exactly as many lanes as x; a mismatch is a compiler error.
+/// If you need to convert element values after import, cast the Ripple result
+/// explicitly.
+/// Example: if v is a native vector of 32 int32_t elements, then
+/// ripple_block_t BS = ripple_set_block_shape(0, 32);
+/// int32_t integers = vec_to_ripple(BS, v); // Ripple int32_t with shape [32].
+/// float values = (float)integers;          // 1 becomes 1.0f; shape stays [32].
+vec_to_ripple(BS, x);
+```
 
-/// \brief Same as ripple_to_vec,
-/// for a 3-d block made of the 3 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 3 dimensions.
-T __attribute__(vector_size(sizeof(T) * N_EL))
-ripple_to_vec_3d(size_t N_EL, T, int PE_ID, T x);
+For element-type changes, see [Numeric conversion after import](#numeric-conversion-after-import)
+and [Bit reinterpretation before export](#bit-reinterpretation-before-export).
 
-/// \brief  Converts a <N_EL x T> vector to a 1-d Ripple block of type T.
-/// \param N_EL the number of elements of the output vector.
-///             Would normally match the total Ripple block size,
-///             but can be bigger.
-/// \param T the vector's element type - you can pass it as a parameter 
-///          because ripple_to_vec is a macro.
-/// \param PE_ID the processing element ID
-///              for which this conversion is made.
-/// \param x the C vector that needs to be converted
-///          to a Ripple (block-) value
-T vec_to_ripple(size_t N_EL, T, int pe_id, 
-  T __attribute__(vector_size(sizeof(T) * N_EL))x);
-
-/// \brief Same as vec_to_ripple,
-/// for a 2-d block made of the 2 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 2 dimensions.
-T vec_to_ripple_2d(size_t N_EL, T, int pe_id, 
-  T __attribute__(vector_size(sizeof(T) * N_EL))x);
-
-/// \brief Same as vec_to_ripple,
-/// for a 3-d block made of the 3 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 3 dimensions.
-T vec_to_ripple_3d(size_t N_EL, T, int pe_id, 
-  T __attribute__(vector_size(sizeof(T) * N_EL))x);
+```C
 
 /// \brief Provides the information that the pointer element `(0, 0 ... 0, 0)`
 /// in this tensor is aligned at the provided alignment (in bytes).
@@ -232,6 +216,7 @@ void ripple_parallel_peel(int pe_id, int ... dims);
 # C++ API
 Some of the C functions above are available in a different form in C++,
 which often results in different syntax.
+
 ```C++
 /// \brief reduction along dimensions defined by the bitfield \p dims,
 ///        using the operator "add".
@@ -257,48 +242,41 @@ template <typename T> T ripple_reduceadd(int dims, T to_reduce);
 template <typename T>
 T ripple_shuffle(T to_shuffle, std::function<size_t(size_t, size_t)>);
 
-/// \brief Converts a <N_EL x T> vector to a 1-d Ripple block of T
-/// for processing element PE_ID.
-/// Ripple block size assumed to be less than or equal to N_EL.
-template <size_t N_EL, typename T, int PE_ID = 0>
-T __attribute__((vector_size(sizeof(T) * N_EL))) ripple_to_vec(T x);
+/// Converts a Ripple value to a native vector of N_EL elements.
+/// The output element type T is inferred from x; the conversion preserves bits.
+/// N_EL must be a positive integer constant; N_EL == 1 returns T.
+/// N_EL fixes the native output size at compile time. For a varying x, the
+/// compiler checks that it matches the lane count of x's propagated block shape.
+/// Preserving the element type and total bit width also preserves the lane count.
+/// A mismatch is a compiler error.
+/// See Shape constraints below for uniform-scalar broadcast and specialization.
+/// Explicit type template arguments are rejected.
+/// If you need to convert element values before export, cast x explicitly.
+/// Example: for an int32_t Ripple value x with shape [32],
+/// ripple_to_vec<32>(x) returns a native vector of 32 int32_t elements.
+/// ripple_to_vec<32>(static_cast<float>(x)) returns 32 floats: 1 becomes 1.0f.
+template <size_t N_EL, typename... ExplicitTypes, typename T>
+auto ripple_to_vec(T x)
+    -> decltype(__builtin_ripple_to_fixed_vector(N_EL, x));
 
-/// \brief Same as ripple_to_vec,
-/// for a 2-d block made of the 2 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 2 dimensions.
-template <size_t N_EL, typename T, int PE_ID = 0>
-T __attribute__((vector_size(sizeof(T) * N_EL))) ripple_to_vec_2d(T x);
-
-/// \brief Same as ripple_to_vec,
-/// for a 3-d block made of the 3 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 3 dimensions.
-template <size_t N_EL, typename T, int PE_ID = 0>
-T __attribute__((vector_size(sizeof(T) * N_EL))) ripple_to_vec_3d(T x);
-
-/// \brief  Converts a <N_EL x T> vector to a 1-d Ripple block of type T.
-/// \param N_EL the number of elements of the input vector.
-///             Would normally match the total Ripple block size,
-///             but can be bigger.
-/// \param T the vector's element type.
-/// \param PE_ID the processing element ID
-///              for which this conversion is made.
-/// \param x the C vector that needs to be converted
-///          to a Ripple (block-) value
-template <size_t N_EL, typename T, int PE_ID = 0>
-T vec_to_ripple(T __attribute__((vector_size(sizeof(T) * N_EL))) x);
-
-/// \brief Same as ripple_to_vec,
-/// for a 2-d block made of the 2 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 2 dimensions.
-template <size_t N_EL, typename T, int PE_ID = 0>
-T vec_to_ripple_2d(T __attribute__((vector_size(sizeof(T) * N_EL))) x);
-
-/// \brief Same as ripple_to_vec,
-/// for a 3-d block made of the 3 first dimensions of the Ripple block.
-/// Assumes that the Ripple block shape has at least 3 dimensions.
-template <size_t N_EL, typename T, int PE_ID = 0>
-T vec_to_ripple_3d(T __attribute__((vector_size(sizeof(T) * N_EL))) x);
+/// Converts a native vector to a Ripple value with the shape of BS.
+/// The native vector type fixes the element type and count at compile time.
+/// The conversion preserves the element type and total bit width, hence lane count.
+/// BS must contain exactly as many lanes as x; a mismatch is a compiler error.
+/// Template arguments are rejected.
+/// If you need to convert element values after import, cast the Ripple result
+/// explicitly.
+/// Example: for a native vector v of 32 int32_t elements,
+/// auto BS = ripple_set_block_shape(0, 32);
+/// auto integers = vec_to_ripple(BS, v); // Ripple int32_t with shape [32].
+/// float values = static_cast<float>(integers); // 1 becomes 1.0f; shape stays [32].
+template <typename... ExplicitTypes, typename Vec>
+auto vec_to_ripple(ripple_block_t BS, Vec x)
+    -> decltype(__builtin_ripple_from_fixed_vector(BS, x));
 ```
+
+For element-type changes, see [Numeric conversion after import](#numeric-conversion-after-import)
+and [Bit reinterpretation before export](#bit-reinterpretation-before-export).
 
 # Target-specific vector functions
 Ripple comes with a library of functions that get vectorized to functions that
@@ -585,11 +563,162 @@ void vadd(int n, float A[n], float B[n], float C[n]) {
 
 ## `ripple_to_vec` / `vec_to_ripple`
 
-The following function implements an integer-vector norm on a sequence of pairs represented in a `VectorPair` (64 elements),
-unzips the pairs into a pair of
-vectors containing the elements of each pair, and returns their elementwise multiplication with each other as a `Vector` (32 elements).
+These helpers convert between native C/C++ vectors and Ripple values. A native
+vector has a fixed element type and count, while a Ripple value has an element
+type and a block shape. Both helpers preserve bits and infer the element type
+from their input. For a varying Ripple value, preserving the element type and
+total bit width also preserves the number of lanes. The native vector type
+fixes the size of the boundary between Ripple and native code at compile time;
+after shape propagation, the compiler checks that the Ripple shape matches it.
+
+The helpers do not perform numeric conversion or accept explicit element-type
+arguments. In C++, only the element count is supplied as a template argument
+to `ripple_to_vec`; `vec_to_ripple` accepts no template arguments.
+
+| Operation | C | C++ |
+| --- | --- | --- |
+| Ripple to vector | `ripple_to_vec(N, x)` | `ripple_to_vec<N>(x)` |
+| Vector to Ripple | `vec_to_ripple(BS, v)` | `vec_to_ripple(BS, v)` |
+
+For example, this C function doubles each element of a native vector:
+
+```C
+#include <stdint.h>
+#include <ripple.h>
+
+typedef int32_t Vector __attribute__((vector_size(128)));
+
+Vector twice(Vector v) {
+  ripple_block_t BS = ripple_set_block_shape(0, 32);
+  int32_t x = vec_to_ripple(BS, v);
+  return ripple_to_vec(32, x * 2);
+}
+```
+
+`vec_to_ripple` takes a block shape, infers the vector's element count, and
+returns a scalar C/C++ type representing a Ripple value with that block shape.
+The native input type fixes the size; the compiler checks that the supplied
+block contains exactly as many elements as the native vector. The native
+vector must be uniform over the Ripple block.
+
+`ripple_to_vec` takes the element count and value. It derives the source shape
+from the value, so it takes no block argument. The explicit count fixes the
+output vector's type and size at compile time; the compiler checks it against
+the propagated Ripple shape. For a varying value, the requested count must
+equal the product of the source value's shape dimensions. For example, a
+value with shape [8, 4] requires 32 output lanes; requesting 16 or 64 is a
+compiler error. The count must be a positive integer constant no greater than
+`INT_MAX / 2`, and the result must also satisfy the compiler's native vector
+type limits. A count of one returns a scalar rather than a one-element C/C++
+vector.
+
+### Numeric conversion after import
+
+To numerically convert a native integer vector to Ripple floats, import it
+with its original element type, then cast the Ripple value. The cast applies
+to each element of the Ripple value:
 
 ```C++
+#include <stdint.h>
+#include <ripple.h>
+
+typedef int32_t IntVector __attribute__((vector_size(128)));
+typedef float FloatVector __attribute__((vector_size(128)));
+
+FloatVector to_floats(IntVector v) {
+  auto BS = ripple_set_block_shape(0, 32);
+  int32_t integers = vec_to_ripple(BS, v);
+  // Numeric conversion: 1 becomes 1.0f.
+  float values = static_cast<float>(integers);
+  // C equivalent: float values = (float)integers;
+  return ripple_to_vec<32>(values);
+}
+```
+
+In C, declare the block with `ripple_block_t BS`, use `(float)integers` for the
+numeric conversion, and use `ripple_to_vec(32, values)` for the return expression.
+A numeric cast preserves the Ripple block shape and element count, even when
+it changes the element size. You can also cast directly before export:
+`ripple_to_vec<32>(static_cast<float>(integers))` in C++ or
+`ripple_to_vec(32, (float)integers)` in C. This is useful when integer promotions
+change an expression's element type.
+
+### Bit reinterpretation before export
+
+To export a Ripple integer value as native floats while preserving its bits,
+use `ripple_reinterp_f32(BS, value)` first, then `ripple_to_vec` with the inferred
+type. `BS` specifies the destination Ripple shape; its total bit width must
+match the input value's total bit width.
+
+```C++
+#include <stdint.h>
+#include <ripple.h>
+
+typedef int32_t IntVector __attribute__((vector_size(128)));
+typedef float FloatVector __attribute__((vector_size(128)));
+
+FloatVector to_float_bits(IntVector v) {
+  auto BS = ripple_set_block_shape(0, 32);
+  int32_t integers = vec_to_ripple(BS, v);
+  float values = ripple_reinterp_f32(BS, integers); // 0x3f800000 becomes 1.0f.
+  return ripple_to_vec<32>(values);
+}
+```
+
+In C, use `ripple_block_t BS` for the block declaration and
+`ripple_to_vec(32, values)` for the return expression. The reinterpretation
+helper has the same spelling in both languages. It can also be used directly
+after import to reinterpret the Ripple result.
+
+When reinterpretation changes the element size, use a destination block with
+an adjusted element count. For example, this works in both C and C++:
+
+```C
+ripple_block_t source_block = ripple_set_block_shape(0, 4);
+ripple_block_t destination_block = ripple_set_block_shape(0, 8);
+// v is a native vector of four int32_t elements.
+int32_t integers = vec_to_ripple(source_block, v);
+int16_t halves = ripple_reinterp_i16(destination_block, integers);
+```
+
+The four 32-bit elements and eight 16-bit elements have equal total bit width.
+Casting to `int16_t` instead would numerically convert four elements and retain
+the source shape. To change only the block dimensions while preserving the
+element type and count, use `ripple_reshape(destination_block, value)`.
+
+### Shape constraints
+
+For a varying Ripple value, conversion preserves the element type and total
+bit width, so the native vector and the complete propagated Ripple value
+must have the same lane count. The source lane count comes from the value's
+shape after operations such as slicing or reshaping, which can differ from
+the enclosing block shape. A lane-count mismatch is a compiler error; a
+smaller value is not implicitly replicated along missing dimensions.
+A uniform scalar can be broadcast to the requested native vector width during
+active Ripple processing. A concrete block specialization also checks this
+conversion against its block shape. Locally resolved single-lane conversions
+still require matching widths.
+
+Multi-dimensional values use the same helpers, with dimension zero varying
+fastest in the flattened vector.
+
+A block passed as a function argument requests specialization; the callee's
+definition must be available in the same LLVM module. In the unspecialized
+scalar fallback, `vec_to_ripple` selects lane zero and `ripple_to_vec` broadcasts
+the scalar. Use concrete blocks in callers so conversions process the complete
+Ripple value.
+
+With `-mllvm -ripple-pad-to-target-simd`, padding stops at these conversions.
+Ripple can pad tensor computations and narrow them at the conversion, while
+preserving the native vector's exact width. Optimization remarks report these
+boundaries.
+
+The following function takes a sequence of pairs represented in a `VectorPair`
+(64 elements), unzips them into two sequences, and returns their elementwise
+products as a `Vector` (32 elements).
+
+```C++
+#include <stdint.h>
 #include <ripple.h>
 #include <ripple/zip.h>
 
@@ -598,12 +727,12 @@ typedef int32_t __attribute__((vector_size(256))) VectorPair;
 
 Vector norm(VectorPair pair) {
   auto BS = ripple_set_block_shape(0, 32, 2);
-  int32_t x = vec_to_ripple_2d<64, int32_t>(BS, pair);
+  int32_t x = vec_to_ripple(BS, pair);
   // This "zip" shuffle turned a sequence of pairs into a pair of sequences
   int32_t even_odds = ripple_shuffle(x, rzip::shuffle_unzip<2, 0, 0>);
   int32_t evens = ripple_slice(even_odds, -1, 0); // 32x1 shape
   int32_t odds = ripple_slice(even_odds, -1, 1); // 32x1 shape
-  return ripple_to_vec<32, int32_t>(BS, evens * odds);
+  return ripple_to_vec<32>(evens * odds);
 }
 ```
 ---
