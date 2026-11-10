@@ -16,6 +16,8 @@ This repository hosts training materials for **Ripple**, an LLVM-based project.
 - [Ripple source code](https://github.com/qualcomm/ripple) (an LLVM fork).
 - [December source release](https://github.com/qualcomm/ripple/releases/tag/ripple_2025-12-19)
 
+The [Ripple test suite](https://github.com/qualcomm/ripple-test-suite) contains a variety of examples, along with correctness tests and cmake files that build Ripple programs. A great place to learn, whether you are a human or an agent.
+
 
 ## HOWTOs
 
